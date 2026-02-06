@@ -2,7 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
 
   /**
    * REQUIRED for WebGPU / WebLLM
@@ -26,8 +25,8 @@ const nextConfig: NextConfig = {
   },
 
   /**
-   * 👇 THIS IS THE KEY LINE
    * Explicitly disable Turbopack
+   * (Empty object is valid)
    */
   turbopack: {},
 
