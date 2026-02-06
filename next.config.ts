@@ -5,11 +5,7 @@ const nextConfig: NextConfig = {
   swcMinify: true,
 
   /**
-   * Required for:
-   * - WebGPU
-   * - WebLLM
-   * - SharedArrayBuffer
-   * - WASM threading
+   * REQUIRED for WebGPU / WebLLM
    */
   async headers() {
     return [
@@ -30,15 +26,19 @@ const nextConfig: NextConfig = {
   },
 
   /**
-   * Webpack config for production
+   * 👇 THIS IS THE KEY LINE
+   * Explicitly disable Turbopack
+   */
+  turbopack: {},
+
+  /**
+   * Force Webpack configuration
    */
   webpack: (config, { isServer }) => {
-    // Prevent bundling native ONNX binaries on server
     if (isServer) {
       config.externals.push("onnxruntime-node");
     }
 
-    // Prevent Node.js core modules from being bundled into client
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
