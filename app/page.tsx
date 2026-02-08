@@ -1,7 +1,14 @@
 'use client';
 
-import WebLLMBenchmark from './components/WebLLMBenchmark';
+import BenchmarkPage from './benchmark/page';
+import Navbar from './components/navbar';
+import HomePage from './components/hero1';
 
 export default function Home() {
-  return <WebLLMBenchmark />;
+  return (
+    <main>
+      <Navbar />
+      <HomePage />
+    </main>
+  );
 }

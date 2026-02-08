@@ -51,8 +51,8 @@ export function BenchmarkPanel({ runPrompt, disabled }: Props) {
                 <button
                     onClick={() => setMode('normal')}
                     className={`px-4 py-2 rounded ${mode === 'normal'
-                            ? 'bg-blue-600'
-                            : 'bg-white/10 hover:bg-white/20'
+                        ? 'bg-blue-600'
+                        : 'bg-white/10 hover:bg-white/20'
                         }`}
                 >
                     Normal
@@ -60,8 +60,8 @@ export function BenchmarkPanel({ runPrompt, disabled }: Props) {
                 <button
                     onClick={() => setMode('hard')}
                     className={`px-4 py-2 rounded ${mode === 'hard'
-                            ? 'bg-red-600'
-                            : 'bg-white/10 hover:bg-white/20'
+                        ? 'bg-red-600'
+                        : 'bg-white/10 hover:bg-white/20'
                         }`}
                 >
                     Hard (GPU Stress)
