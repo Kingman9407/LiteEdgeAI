@@ -92,7 +92,11 @@ export interface BenchmarkResult {
     response: string;
     tokensPerSecond: number;
     totalTime: number;
+    tokenCount: number;
+    wordCount: number;
+    charCount: number;
 }
+
 
 export interface BenchmarkTest {
     name: string;

@@ -65,7 +65,7 @@ export default function Navbar() {
                 <div className="md:hidden border-t border-emerald-900/40 
                     bg-black/95 rounded-b-2xl backdrop-blur-xl">
                     <div className="flex flex-col px-4 py-4 space-y-4 text-gray-300">
-                        {["Home", "Features", "Pricing", "Contact"].map((item) => (
+                        {["Home", "Ranking", "Benchmark", "About"].map((item) => (
                             <Link
                                 key={item}
                                 href={`/${item === "Home" ? "" : item.toLowerCase()}`}
