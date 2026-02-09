@@ -102,6 +102,7 @@ export default function WebLLMBenchmark() {
                     tokensPerSecond: 0, // Replace with actual value from BenchmarkPanel
                     loadTime: 0, // Replace with actual value from BenchmarkPanel
                 }}
+                fullGPUInfo={gpuInfo}
             />
         );
     }

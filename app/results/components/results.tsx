@@ -17,6 +17,78 @@ type BenchmarkResults = {
     // ... other benchmark metrics
 };
 
+// Import the GPUInfo type from the hook
+type PrecisionFormat = {
+    rangeMin: number;
+    rangeMax: number;
+    precision: number;
+};
+
+type GPUInfo = {
+    // Basic Info
+    renderer: string;
+    vendor: string;
+    unmaskedRenderer?: string;
+    unmaskedVendor?: string;
+
+    // API Support
+    webgl: boolean;
+    webgl2: boolean;
+    webgpu: boolean;
+    webglVersion: string;
+    shadingLanguageVersion: string;
+
+    // Texture Limits
+    maxTextureSize: number;
+    maxCubeMapSize: number;
+    maxRenderbufferSize: number;
+    maxTextureImageUnits: number;
+    maxCombinedTextureImageUnits: number;
+    maxVertexTextureImageUnits: number;
+    maxAnisotropy: number;
+
+    // Rendering Limits
+    maxViewportWidth: number;
+    maxViewportHeight: number;
+    maxVertexAttribs: number;
+    maxVertexUniformVectors: number;
+    maxFragmentUniformVectors: number;
+    maxVaryingVectors: number;
+    maxDrawBuffers: number;
+    maxColorAttachments: number;
+
+    // Precision
+    vertexShaderHighFloat: PrecisionFormat;
+    vertexShaderMediumFloat: PrecisionFormat;
+    vertexShaderLowFloat: PrecisionFormat;
+    fragmentShaderHighFloat: PrecisionFormat;
+    fragmentShaderMediumFloat: PrecisionFormat;
+    fragmentShaderLowFloat: PrecisionFormat;
+
+    // Extensions
+    extensions: string[];
+
+    // WebGPU
+    webgpuAdapter?: {
+        architecture?: string;
+        device?: string;
+        vendor?: string;
+        backend?: string;
+    };
+
+    // Additional
+    aliasedPointSizeRange?: [number, number];
+    aliasedLineWidthRange?: [number, number];
+    subpixelBits: number;
+    samples: number;
+
+    // Predictions
+    predictedTier: 'High-End' | 'Mid-Range' | 'Low-End' | 'Integrated' | 'Unknown';
+    predictedVRAM: string;
+    performanceScore: number;
+    capabilities: string[];
+};
+
 type SubmitResultsPageProps = {
     onSubmit: () => void;
     onSkip: () => void;
@@ -28,8 +100,9 @@ type SubmitResultsPageProps = {
         graphicsBackend?: string;
         platformType?: string;
     };
-    systemSpecs?: PCSpecs;
+    systemSpecs?: PCSpecs | null;
     benchmarkResults?: BenchmarkResults;
+    fullGPUInfo?: GPUInfo | null;
 };
 
 export function SubmitResultsPage({
@@ -37,7 +110,8 @@ export function SubmitResultsPage({
     onSkip,
     benchmarkData,
     systemSpecs,
-    benchmarkResults
+    benchmarkResults,
+    fullGPUInfo
 }: SubmitResultsPageProps) {
     const [agreed, setAgreed] = useState(false);
 
@@ -130,6 +204,22 @@ export function SubmitResultsPage({
                                 )}
                             </div>
                         )}
+
+                        {/* Additional GPU Capabilities */}
+                        {fullGPUInfo && fullGPUInfo.capabilities && fullGPUInfo.capabilities.length > 0 && (
+                            <div className="space-y-3 pt-2 border-t border-emerald-500/10">
+                                <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-3">
+                                    <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">GPU Capabilities</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {fullGPUInfo.capabilities.slice(0, 6).map((cap, i) => (
+                                            <span key={i} className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded">
+                                                {cap}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Right Column: Benchmark Results */}
@@ -162,7 +252,14 @@ export function SubmitResultsPage({
                                 {benchmarkData.performanceTier && (
                                     <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-3">
                                         <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Performance Tier</div>
-                                        <div className="text-white font-medium">{benchmarkData.performanceTier}</div>
+                                        <div className={`font-medium ${benchmarkData.performanceTier === 'High-End' ? 'text-green-400' :
+                                                benchmarkData.performanceTier === 'Mid-Range' ? 'text-yellow-400' :
+                                                    benchmarkData.performanceTier === 'Low-End' ? 'text-orange-400' :
+                                                        benchmarkData.performanceTier === 'Integrated' ? 'text-blue-400' :
+                                                            'text-white'
+                                            }`}>
+                                            {benchmarkData.performanceTier}
+                                        </div>
                                     </div>
                                 )}
 
@@ -170,6 +267,13 @@ export function SubmitResultsPage({
                                     <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-3">
                                         <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">GPU Brand</div>
                                         <div className="text-white font-medium">{benchmarkData.gpuBrand}</div>
+                                    </div>
+                                )}
+
+                                {fullGPUInfo?.predictedVRAM && (
+                                    <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-3">
+                                        <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Estimated VRAM</div>
+                                        <div className="text-white font-medium">{fullGPUInfo.predictedVRAM}</div>
                                     </div>
                                 )}
                             </div>
@@ -181,23 +285,52 @@ export function SubmitResultsPage({
                                 {benchmarkResults.modelName && (
                                     <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-3">
                                         <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Model</div>
-                                        <div className="text-white font-medium">{benchmarkResults.modelName}</div>
+                                        <div className="text-white font-medium text-sm">{benchmarkResults.modelName}</div>
                                     </div>
                                 )}
 
-                                {benchmarkResults.tokensPerSecond && (
+                                {benchmarkResults.tokensPerSecond !== undefined && benchmarkResults.tokensPerSecond > 0 && (
                                     <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-3">
                                         <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Tokens/Second</div>
                                         <div className="text-white font-medium">{benchmarkResults.tokensPerSecond.toFixed(2)}</div>
                                     </div>
                                 )}
 
-                                {benchmarkResults.loadTime && (
+                                {benchmarkResults.loadTime !== undefined && benchmarkResults.loadTime > 0 && (
                                     <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 p-3">
                                         <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Load Time</div>
                                         <div className="text-white font-medium">{benchmarkResults.loadTime.toFixed(2)}s</div>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* GPU Technical Details */}
+                        {fullGPUInfo && (
+                            <div className="space-y-3 pt-2 border-t border-emerald-500/10">
+                                <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Technical Details</div>
+
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="rounded bg-emerald-500/5 border border-emerald-500/10 p-2">
+                                        <div className="text-gray-500 mb-1">Max Texture Size</div>
+                                        <div className="text-white font-mono">{fullGPUInfo.maxTextureSize}px</div>
+                                    </div>
+
+                                    <div className="rounded bg-emerald-500/5 border border-emerald-500/10 p-2">
+                                        <div className="text-gray-500 mb-1">Max Viewport</div>
+                                        <div className="text-white font-mono">{fullGPUInfo.maxViewportWidth}px</div>
+                                    </div>
+
+                                    <div className="rounded bg-emerald-500/5 border border-emerald-500/10 p-2">
+                                        <div className="text-gray-500 mb-1">Max Anisotropy</div>
+                                        <div className="text-white font-mono">{fullGPUInfo.maxAnisotropy}x</div>
+                                    </div>
+
+                                    <div className="rounded bg-emerald-500/5 border border-emerald-500/10 p-2">
+                                        <div className="text-gray-500 mb-1">Extensions</div>
+                                        <div className="text-white font-mono">{fullGPUInfo.extensions.length}</div>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -239,6 +372,10 @@ export function SubmitResultsPage({
                             <div className="flex items-start gap-2">
                                 <span className="text-emerald-500 mt-1">•</span>
                                 <span><strong className="text-white">Platform type</strong> (Desktop or Mobile)</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                                <span className="text-emerald-500 mt-1">•</span>
+                                <span><strong className="text-white">GPU capabilities</strong> (WebGL extensions, texture limits, etc.)</span>
                             </div>
                         </div>
                     </div>
