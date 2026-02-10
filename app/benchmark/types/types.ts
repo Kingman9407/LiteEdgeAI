@@ -86,16 +86,7 @@ export interface ModelConfig {
    BENCHMARK TYPES
    ===================================================== */
 
-export interface BenchmarkResult {
-    name: string;
-    prompt: string;
-    response: string;
-    tokensPerSecond: number;
-    totalTime: number;
-    tokenCount: number;
-    wordCount: number;
-    charCount: number;
-}
+
 
 
 export interface BenchmarkTest {
@@ -105,3 +96,20 @@ export interface BenchmarkTest {
     category: 'speed' | 'reasoning' | 'creativity' | 'knowledge';
 }
 
+export type BenchmarkResult = {
+    name: string;
+    prompt: string;
+    response: string;
+    totalTime: number;
+    tokenCount: number;
+    wordCount: number;
+    charCount: number;
+    tokensPerSecond: number;
+};
+
+export type BenchmarkResults = {
+    modelName?: string;
+    tokensPerSecond: number;
+    loadTime: number;
+    benchmarks?: BenchmarkResult[];  // Add this line to your existing BenchmarkResults type
+};

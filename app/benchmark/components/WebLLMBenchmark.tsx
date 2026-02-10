@@ -7,6 +7,7 @@ import { ModelSelector } from './ModelSelector';
 import { BenchmarkPanel } from './BenchmarkPanel';
 import { GPUInfoModal } from './GPUInfoModal';
 import { SubmitResultsPage } from '../../results/components/results';
+import { BenchmarkResult } from '../types/types';
 
 type PCSpecs = {
     cpuCores: number;
@@ -23,6 +24,12 @@ export default function WebLLMBenchmark() {
     const [showGPU, setShowGPU] = useState(false);
     const [showSubmitPage, setShowSubmitPage] = useState(false);
     const [specs, setSpecs] = useState<PCSpecs | null>(null);
+    const [benchmarkResults, setBenchmarkResults] = useState<{
+        tokensPerSecond: number;
+        loadTime: number;
+        score: number;
+        benchmarks: BenchmarkResult[];
+    } | null>(null);
 
     const {
         modelLoaded,
@@ -53,6 +60,7 @@ export default function WebLLMBenchmark() {
         console.log('Submitting benchmark results...');
         console.log('GPU Info:', gpuInfo);
         console.log('System Specs:', specs);
+        console.log('Benchmark Results:', benchmarkResults);
         // You can add your API submission logic here
         setShowSubmitPage(false);
         // Maybe show a success message
@@ -89,7 +97,7 @@ export default function WebLLMBenchmark() {
                 onSkip={handleSkip}
                 benchmarkData={{
                     normalizedGPU: gpuInfo?.unmaskedRenderer || gpuInfo?.renderer || 'Unknown GPU',
-                    performanceScore: gpuInfo?.performanceScore || 0,
+                    performanceScore: benchmarkResults?.score || 0,
                     performanceTier: gpuInfo?.predictedTier || 'Unknown',
                     graphicsBackend: getGraphicsBackend(),
                     gpuBrand: gpuInfo?.unmaskedVendor || gpuInfo?.vendor || 'Unknown',
@@ -98,9 +106,9 @@ export default function WebLLMBenchmark() {
                 systemSpecs={specs}
                 benchmarkResults={{
                     modelName: model,
-                    // Add your actual benchmark results here
-                    tokensPerSecond: 0, // Replace with actual value from BenchmarkPanel
-                    loadTime: 0, // Replace with actual value from BenchmarkPanel
+                    tokensPerSecond: benchmarkResults?.tokensPerSecond || 0,
+                    loadTime: benchmarkResults?.loadTime || 0,
+                    benchmarks: benchmarkResults?.benchmarks || [],
                 }}
                 fullGPUInfo={gpuInfo}
             />
@@ -151,6 +159,7 @@ export default function WebLLMBenchmark() {
                     <BenchmarkPanel
                         disabled={!modelLoaded}
                         runPrompt={generate}
+                        onBenchmarkComplete={setBenchmarkResults}
                     />
                 </div>
 
@@ -158,7 +167,7 @@ export default function WebLLMBenchmark() {
                 <div className="flex justify-center">
                     <button
                         onClick={handleSubmitResults}
-                        disabled={!modelLoaded || !gpuInfo}
+                        disabled={!modelLoaded || !gpuInfo || !benchmarkResults}
                         className="px-8 py-3 rounded-lg border transition
                             border-emerald-400 bg-emerald-500/10 text-white 
                             shadow-[0_0_12px_rgba(16,185,129,0.4)]

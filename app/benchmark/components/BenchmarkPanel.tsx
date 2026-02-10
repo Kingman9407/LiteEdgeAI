@@ -5,9 +5,15 @@ import { BenchmarkResult, BenchmarkMode } from '../types/types';
 interface Props {
     runPrompt: (p: string) => Promise<string>;
     disabled: boolean;
+    onBenchmarkComplete?: (results: {
+        tokensPerSecond: number;
+        loadTime: number;
+        score: number;
+        benchmarks: BenchmarkResult[];
+    }) => void;
 }
 
-export function BenchmarkPanel({ runPrompt, disabled }: Props) {
+export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Props) {
     const [mode, setMode] = useState<BenchmarkMode>('normal');
     const [running, setRunning] = useState(false);
     const [results, setResults] = useState<BenchmarkResult[]>([]);
@@ -21,6 +27,7 @@ export function BenchmarkPanel({ runPrompt, disabled }: Props) {
         setCurrent(0);
 
         const temp: BenchmarkResult[] = [];
+        const benchmarkStartTime = performance.now();
 
         for (let i = 0; i < tests.length; i++) {
             setCurrent(i + 1);
@@ -46,6 +53,22 @@ export function BenchmarkPanel({ runPrompt, disabled }: Props) {
             });
 
             setResults([...temp]);
+        }
+
+        const totalLoadTime = (performance.now() - benchmarkStartTime) / 1000;
+
+        // Calculate average tokens per second and pass to parent
+        const totalTime = temp.reduce((a, b) => a + b.totalTime, 0);
+        const totalTokens = temp.reduce((a, b) => a + b.tokenCount, 0);
+        const avgTokensPerSec = totalTokens / totalTime;
+
+        if (onBenchmarkComplete) {
+            onBenchmarkComplete({
+                tokensPerSecond: avgTokensPerSec,
+                loadTime: totalLoadTime,
+                score: Math.round(avgTokensPerSec * 10),
+                benchmarks: temp,
+            });
         }
 
         setRunning(false);
@@ -77,8 +100,8 @@ export function BenchmarkPanel({ runPrompt, disabled }: Props) {
                 <button
                     onClick={() => setMode('normal')}
                     className={`px-4 py-2 rounded ${mode === 'normal'
-                            ? 'bg-blue-600'
-                            : 'bg-white/10 hover:bg-white/20'
+                        ? 'bg-blue-600'
+                        : 'bg-white/10 hover:bg-white/20'
                         }`}
                 >
                     Normal
@@ -86,8 +109,8 @@ export function BenchmarkPanel({ runPrompt, disabled }: Props) {
                 <button
                     onClick={() => setMode('hard')}
                     className={`px-4 py-2 rounded ${mode === 'hard'
-                            ? 'bg-red-600'
-                            : 'bg-white/10 hover:bg-white/20'
+                        ? 'bg-red-600'
+                        : 'bg-white/10 hover:bg-white/20'
                         }`}
                 >
                     Hard (GPU Stress)
