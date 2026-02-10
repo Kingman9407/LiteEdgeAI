@@ -1,100 +1,94 @@
-/* =====================================================
-   MODEL GENERATION PARAMETERS
-   ===================================================== */
-export type BenchmarkMode = 'normal' | 'hard';
-
-
-export interface GenerationParameters {
-    /** Maximum number of tokens to generate */
-    max_length?: number;
-
-    /** Controls randomness (0.0 = deterministic, higher = more creative) */
-    temperature?: number;
-
-    /** Nucleus sampling threshold */
-    top_p?: number;
-
-    /** Whether to sample or use greedy decoding */
-    do_sample?: boolean;
-
-    /** Include prompt in the generated output */
-    return_full_text?: boolean;
-}
+// shared/types.ts — SINGLE SOURCE OF TRUTH FOR ALL TYPES
 
 /* =====================================================
-   HUGGING FACE INFERENCE API
+   SYSTEM & PC SPECS
    ===================================================== */
 
-export interface HuggingFaceRequest {
-    /** Input prompt */
-    inputs: string;
-
-    /** Optional generation controls */
-    parameters?: GenerationParameters;
-}
-
-export interface HuggingFaceResponse {
-    /** Generated text from the model */
-    generated_text?: string;
-
-    /** Error message if generation failed */
-    error?: string;
-}
+export type PCSpecs = {
+    cpuCores: number;
+    deviceMemory?: number;
+    os: string;
+    screen: string;
+};
 
 /* =====================================================
-   INTERNAL / PUBLIC API CONTRACT
+   GPU TYPES
    ===================================================== */
 
-export interface APIGenerateRequest {
-    /** Prompt sent from client */
-    prompt: string;
+export type PrecisionFormat = {
+    rangeMin: number;
+    rangeMax: number;
+    precision: number;
+};
 
-    /** Optional overrides for generation */
-    parameters?: GenerationParameters;
-}
+export type GPUInfo = {
+    // Identity
+    renderer?: string;
+    vendor?: string;
+    unmaskedRenderer?: string;
+    unmaskedVendor?: string;
 
-export interface APIGenerateResponse {
-    /** Final generated text */
-    generated_text: string;
-}
+    // API Support
+    webgpu?: boolean;
+    webgl?: boolean;
+    webgl2?: boolean;
+    webglVersion?: string;
+    shadingLanguageVersion?: string;
 
-export interface APIErrorResponse {
-    /** Error message returned by API */
-    error: string;
-}
+    // Analysis
+    predictedVRAM?: string;
+    predictedTier?: string;
+    performanceScore?: number;
+    capabilities?: string[];
 
-/* =====================================================
-   OPTIONAL: MODEL METADATA (FUTURE USE)
-   ===================================================== */
+    // Technical Limits
+    maxTextureSize?: number;
+    maxCubeMapSize?: number;
+    maxRenderbufferSize?: number;
+    maxTextureImageUnits?: number;
+    maxCombinedTextureImageUnits?: number;
+    maxVertexTextureImageUnits?: number;
+    maxViewportWidth?: number;
+    maxViewportHeight?: number;
+    maxVertexAttribs?: number;
+    maxVertexUniformVectors?: number;
+    maxFragmentUniformVectors?: number;
+    maxVaryingVectors?: number;
+    maxDrawBuffers?: number;
+    maxColorAttachments?: number;
+    maxAnisotropy?: number;
 
-export type ModelProvider = 'huggingface' | 'webllm' | 'local';
-export type Benchmark = 'normal' | 'hard';
+    // Shader Precision
+    vertexShaderHighFloat?: PrecisionFormat;
+    vertexShaderMediumFloat?: PrecisionFormat;
+    vertexShaderLowFloat?: PrecisionFormat;
+    fragmentShaderHighFloat?: PrecisionFormat;
+    fragmentShaderMediumFloat?: PrecisionFormat;
+    fragmentShaderLowFloat?: PrecisionFormat;
 
+    // Extensions
+    extensions?: string[];
 
-export interface ModelConfig {
-    /** Model identifier (e.g., gpt2, llama, phi) */
-    modelId: string;
+    // WebGPU Adapter
+    webgpuAdapter?: {
+        architecture?: string;
+        device?: string;
+        vendor?: string;
+        backend?: string;
+    };
 
-    /** Provider type */
-    provider: ModelProvider;
-
-    /** Default generation parameters */
-    defaultParameters?: GenerationParameters;
-}
+    // Additional
+    aliasedPointSizeRange?: [number, number];
+    aliasedLineWidthRange?: [number, number];
+    subpixelBits?: number;
+    samples?: number;
+};
 
 /* =====================================================
    BENCHMARK TYPES
    ===================================================== */
 
-
-
-
-export interface BenchmarkTest {
-    name: string;
-    description: string;
-    prompt: string;
-    category: 'speed' | 'reasoning' | 'creativity' | 'knowledge';
-}
+export type BenchmarkMode = 'normal' | 'hard';
 
 export type BenchmarkResult = {
     name: string;
@@ -111,5 +105,77 @@ export type BenchmarkResults = {
     modelName?: string;
     tokensPerSecond: number;
     loadTime: number;
-    benchmarks?: BenchmarkResult[];  // Add this line to your existing BenchmarkResults type
+    benchmarks: BenchmarkResult[];
 };
+
+export type BenchmarkData = {
+    normalizedGPU?: string;
+    performanceScore?: number;
+    performanceTier?: string;
+    graphicsBackend?: string;
+    gpuBrand?: string;
+    platformType?: string;
+};
+
+export interface BenchmarkTest {
+    name: string;
+    description: string;
+    prompt: string;
+    category: 'speed' | 'reasoning' | 'creativity' | 'knowledge';
+}
+
+/* =====================================================
+   SUBMIT / RESULTS PAGE
+   ===================================================== */
+
+export type SubmitResultsPageProps = {
+    onSubmit: () => void;
+    onSkip: () => void;
+    benchmarkData?: BenchmarkData;
+    systemSpecs?: PCSpecs | null;
+    benchmarkResults?: BenchmarkResults;
+    fullGPUInfo?: GPUInfo | null;
+};
+
+/* =====================================================
+   MODEL / API TYPES
+   ===================================================== */
+
+export type ModelProvider = 'huggingface' | 'webllm' | 'local';
+
+export interface GenerationParameters {
+    max_length?: number;
+    temperature?: number;
+    top_p?: number;
+    do_sample?: boolean;
+    return_full_text?: boolean;
+}
+
+export interface ModelConfig {
+    modelId: string;
+    provider: ModelProvider;
+    defaultParameters?: GenerationParameters;
+}
+
+export interface HuggingFaceRequest {
+    inputs: string;
+    parameters?: GenerationParameters;
+}
+
+export interface HuggingFaceResponse {
+    generated_text?: string;
+    error?: string;
+}
+
+export interface APIGenerateRequest {
+    prompt: string;
+    parameters?: GenerationParameters;
+}
+
+export interface APIGenerateResponse {
+    generated_text: string;
+}
+
+export interface APIErrorResponse {
+    error: string;
+}

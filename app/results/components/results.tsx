@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SystemAndBenchmarkCards } from './Systemandbenchmarkcards';
 import { PrivacyConsentSection } from './Privacyconsentsection';
-import type { SubmitResultsPageProps } from './types';
+import type { SubmitResultsPageProps } from '../../benchmark/types/types';
 
 export function SubmitResultsPage({
     onSubmit,
