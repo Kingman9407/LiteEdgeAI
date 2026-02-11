@@ -46,7 +46,7 @@ export function SubmitResultsPage({
             if (result.success) {
                 onSubmit();
             } else {
-                setError(result.error || 'Failed to submit benchmark');
+                setError('Failed to submit benchmark');
             }
         } catch (err) {
             console.error('Error submitting benchmark:', err);
