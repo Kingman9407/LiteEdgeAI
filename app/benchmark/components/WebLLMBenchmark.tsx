@@ -162,6 +162,7 @@ export default function WebLLMBenchmark() {
                 systemSpecs={processedData.systemSpecs}
                 benchmarkResults={processedData.benchmarkResults}
                 fullGPUInfo={processedData.fullGPUInfo}
+                modelName={model}
             />
         );
     }
