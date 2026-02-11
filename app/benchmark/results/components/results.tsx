@@ -12,8 +12,8 @@ export function SubmitResultsPage({
     benchmarkData,
     systemSpecs,
     benchmarkResults,
-    modelName  // ✅ Now part of SubmitResultsPageProps
-}: SubmitResultsPageProps) {  // ✅ Remove the & { modelName: string }
+    modelName
+}: SubmitResultsPageProps) {
     const [agreed, setAgreed] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -46,11 +46,20 @@ export function SubmitResultsPage({
             if (result.success) {
                 onSubmit();
             } else {
-                setError('Failed to submit benchmark');
+                // ✅ Proper error handling for all result types
+                let errorMessage = 'Failed to submit benchmark';
+
+                if ('error' in result && result.error) {
+                    errorMessage = result.error;
+                } else if ('errorDetails' in result && result.errorDetails) {
+                    errorMessage = result.errorDetails.message || result.errorDetails.hint || errorMessage;
+                }
+
+                setError(errorMessage);
             }
         } catch (err) {
             console.error('Error submitting benchmark:', err);
-            setError('An unexpected error occurred');
+            setError(err instanceof Error ? err.message : 'An unexpected error occurred');
         } finally {
             setIsSubmitting(false);
         }
