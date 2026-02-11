@@ -1,11 +1,18 @@
-type PrivacyConsentSectionProps = {
+interface PrivacyConsentSectionProps {
     agreed: boolean;
     onAgreedChange: (agreed: boolean) => void;
     onSubmit: () => void;
     onSkip: () => void;
-};
+    isSubmitting?: boolean;
+}
 
-export function PrivacyConsentSection({ agreed, onAgreedChange, onSubmit, onSkip }: PrivacyConsentSectionProps) {
+export function PrivacyConsentSection({
+    agreed,
+    onAgreedChange,
+    onSubmit,
+    onSkip,
+    isSubmitting  // ✅ Add this to the destructured parameters
+}: PrivacyConsentSectionProps) {
     return (
         <div className="rounded-xl bg-black/80 backdrop-blur p-8
             border border-emerald-500/20
@@ -76,16 +83,13 @@ export function PrivacyConsentSection({ agreed, onAgreedChange, onSubmit, onSkip
             <div className="flex gap-4 pt-4">
                 <button
                     onClick={onSubmit}
-                    disabled={!agreed}
-                    className="flex-1 px-6 py-3 rounded-lg border transition
-                        border-emerald-400 bg-emerald-500/10 text-white 
-                        shadow-[0_0_12px_rgba(16,185,129,0.4)]
-                        hover:bg-emerald-500/20 hover:shadow-[0_0_18px_rgba(16,185,129,0.6)]
-                        disabled:opacity-50 disabled:cursor-not-allowed
-                        disabled:shadow-none disabled:hover:bg-emerald-500/10
-                        font-medium"
+                    disabled={!agreed || isSubmitting}
+                    className={`flex-1 py-3 rounded-lg font-semibold transition-all ${agreed && !isSubmitting
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
                 >
-                    Submit Results
+                    {isSubmitting ? 'Submitting...' : 'Submit Results'}
                 </button>
 
                 <button

@@ -4,7 +4,7 @@ import type {
     BenchmarkData,
     BenchmarkResults,
     GPUInfo
-} from '../../benchmark/types/types';
+} from '../../types/types';
 
 type SystemAndBenchmarkCardsProps = {
     systemSpecs?: PCSpecs | null;

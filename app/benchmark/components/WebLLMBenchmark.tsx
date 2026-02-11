@@ -7,7 +7,7 @@ import { useGPUInfo } from '../hooks/useGPUInfo';
 import { ModelSelector } from './ModelSelector';
 import { BenchmarkPanel } from './BenchmarkPanel';
 import { GPUInfoModal } from './GPUInfoModal';
-import { SubmitResultsPage } from '../../results/components/results';
+import { SubmitResultsPage } from '../results/components/results';
 import type {
     BenchmarkResult,
     PCSpecs,
@@ -18,7 +18,7 @@ import type {
 import {
     BenchmarkDataProcessor,
     type ProcessedSession
-} from '../../results/components/Benchmarkdataprocessor';
+} from '../results/components/Benchmarkdataprocessor';
 
 interface RawBenchmarkRun {
     testName: string;

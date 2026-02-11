@@ -128,14 +128,15 @@ export interface BenchmarkTest {
    SUBMIT / RESULTS PAGE
    ===================================================== */
 
-export type SubmitResultsPageProps = {
+export interface SubmitResultsPageProps {
     onSubmit: () => void;
     onSkip: () => void;
-    benchmarkData?: BenchmarkData;
-    systemSpecs?: PCSpecs | null;
-    benchmarkResults?: BenchmarkResults;
+    benchmarkData: BenchmarkData;
+    systemSpecs: PCSpecs;
+    benchmarkResults: BenchmarkResults;
     fullGPUInfo?: GPUInfo | null;
-};
+    modelName: string; // Add this line
+}
 
 /* =====================================================
    MODEL / API TYPES
