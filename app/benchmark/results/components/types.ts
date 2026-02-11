@@ -10,6 +10,7 @@ export type BenchmarkResult = {
     tokensPerSecond: number;
 };
 
+
 export type BenchmarkResults = {
     modelName?: string;
     tokensPerSecond?: number;

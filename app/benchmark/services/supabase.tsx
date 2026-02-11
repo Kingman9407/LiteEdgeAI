@@ -31,6 +31,7 @@ interface SubmitBenchmarkParams {
     sessionId?: string;
 }
 
+
 /**
  * Main function to submit benchmark data to Supabase
  */
@@ -248,11 +249,17 @@ export async function getAllModels() {
         // Process data to add counts
         const processedData = data?.map(model => ({
             ...model,
-            total_gpu_types: new Set(model.gpu_sessions?.map(s => s.gpu_name)).size || 0,
+            total_gpu_types: new Set(model.gpu_sessions?.map((s: { gpu_name?: string }) => s.gpu_name)).size || 0,
             total_sessions: model.gpu_sessions?.length || 0,
-            avg_tokens_per_second: model.gpu_sessions?.length > 0
-                ? model.gpu_sessions.reduce((sum, s) => sum + (s.tokens_per_second || 0), 0) / model.gpu_sessions.length
-                : 0
+            avg_tokens_per_second:
+                model.gpu_sessions && model.gpu_sessions.length > 0
+                    ? model.gpu_sessions.reduce(
+                        (sum: number, s: { tokens_per_second?: number }) =>
+                            sum + (s.tokens_per_second || 0),
+                        0
+                    ) / model.gpu_sessions.length
+                    : 0,
+
         }));
 
         console.log('✅ Models fetched:', processedData?.length || 0);
