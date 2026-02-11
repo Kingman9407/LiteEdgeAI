@@ -5,7 +5,7 @@ import type {
     BenchmarkResults,
     BenchmarkResult,
     GPUInfo
-} from '../../benchmark/types/types';
+} from '../../types/types';
 
 // ================= RAW DATA INTERFACES =================
 
