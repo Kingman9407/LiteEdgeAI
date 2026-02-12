@@ -13,6 +13,8 @@ interface Props {
     }) => void;
 }
 
+const BRAND_GREEN = '#4fbf8a';
+
 export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Props) {
     const [mode, setMode] = useState<BenchmarkMode>('normal');
     const [running, setRunning] = useState(false);
@@ -94,26 +96,26 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
     }, [results]);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             {/* Mode Selector */}
-            <div className="flex gap-3">
+            <div className="flex gap-2">
                 <button
                     onClick={() => setMode('normal')}
-                    className={`px-4 py-2 rounded ${mode === 'normal'
-                        ? 'bg-blue-600'
-                        : 'bg-white/10 hover:bg-white/20'
+                    className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${mode === 'normal'
+                            ? 'bg-[#4fbf8a] text-white'
+                            : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
                         }`}
                 >
                     Normal
                 </button>
                 <button
                     onClick={() => setMode('hard')}
-                    className={`px-4 py-2 rounded ${mode === 'hard'
-                        ? 'bg-red-600'
-                        : 'bg-white/10 hover:bg-white/20'
+                    className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${mode === 'hard'
+                            ? 'bg-[#4fbf8a] text-white'
+                            : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
                         }`}
                 >
-                    Hard (GPU Stress)
+                    Hard
                 </button>
             </div>
 
@@ -121,7 +123,11 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
             <button
                 onClick={runBenchmark}
                 disabled={disabled || running}
-                className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded font-semibold disabled:opacity-50"
+                className="w-full bg-[#4fbf8a]/10 hover:bg-[#4fbf8a]/20 
+                    border border-[#4fbf8a] text-[#f2f3f5]
+                    py-3 rounded-lg font-medium transition-all
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    disabled:hover:bg-[#4fbf8a]/10"
             >
                 {running
                     ? `Running ${current}/${tests.length}`
@@ -130,7 +136,7 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
 
             {/* Summary */}
             {summary && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <Stat label="Total Time" value={`${summary.totalTime.toFixed(2)}s`} />
                     <Stat
                         label="Avg Tokens/sec"
@@ -143,30 +149,30 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
 
             {/* Results Table */}
             {results.length > 0 && (
-                <div className="overflow-x-auto rounded-lg border border-white/10">
+                <div className="overflow-x-auto rounded-lg border border-[#34363c]">
                     <table className="w-full text-sm">
-                        <thead className="bg-white/10 text-left">
+                        <thead className="bg-[#232428] text-left">
                             <tr>
-                                <th className="p-3">Test</th>
-                                <th className="p-3">Time (s)</th>
-                                <th className="p-3">Tokens/sec</th>
-                                <th className="p-3">Tokens</th>
-                                <th className="p-3">Chars</th>
-                                <th className="p-3">Response</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Test</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Time (s)</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Tokens/sec</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Tokens</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Chars</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Response</th>
                             </tr>
                         </thead>
                         <tbody>
                             {results.map((r, i) => (
-                                <tr key={i} className="border-t border-white/10">
-                                    <td className="p-3 font-medium">{r.name}</td>
-                                    <td className="p-3">{r.totalTime.toFixed(2)}</td>
-                                    <td className="p-3">
+                                <tr key={i} className="border-t border-[#34363c] hover:bg-[#232428]/30 transition-colors">
+                                    <td className="p-3 font-medium text-[#f2f3f5]">{r.name}</td>
+                                    <td className="p-3 text-[#b0b4bb]">{r.totalTime.toFixed(2)}</td>
+                                    <td className="p-3 text-[#4fbf8a]">
                                         {r.tokensPerSecond.toFixed(2)}
                                     </td>
-                                    <td className="p-3">{r.tokenCount}</td>
-                                    <td className="p-3">{r.charCount}</td>
-                                    <td className="p-3 max-w-xl">
-                                        <div className="line-clamp-3 opacity-90">
+                                    <td className="p-3 text-[#b0b4bb]">{r.tokenCount}</td>
+                                    <td className="p-3 text-[#b0b4bb]">{r.charCount}</td>
+                                    <td className="p-3 max-w-xl text-[#b0b4bb]">
+                                        <div className="line-clamp-3">
                                             {r.response}
                                         </div>
                                     </td>
@@ -183,9 +189,9 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
 /* ---------- Small stat card ---------- */
 function Stat({ label, value }: { label: string; value: string | number }) {
     return (
-        <div className="rounded-lg bg-white/10 p-4">
-            <div className="text-xs opacity-70">{label}</div>
-            <div className="text-lg font-semibold">{value}</div>
+        <div className="rounded-lg bg-[#232428] border border-[#34363c] p-4">
+            <div className="text-xs text-[#b0b4bb]">{label}</div>
+            <div className="text-lg font-semibold text-[#f2f3f5]">{value}</div>
         </div>
     );
 }

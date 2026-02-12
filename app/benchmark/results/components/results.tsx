@@ -6,13 +6,16 @@ import { PrivacyConsentSection } from './Privacyconsentsection';
 import { submitBenchmarkToSupabase } from '../../services/supabase';
 import type { SubmitResultsPageProps } from '../../types/types';
 
+/* ------------------ COLOR SYSTEM ------------------ */
+const BRAND_GREEN = '#4fbf8a';
+
 export function SubmitResultsPage({
     onSubmit,
     onSkip,
     benchmarkData,
     systemSpecs,
     benchmarkResults,
-    modelName
+    modelName,
 }: SubmitResultsPageProps) {
     const [agreed, setAgreed] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,7 +24,7 @@ export function SubmitResultsPage({
     const handleSubmit = async () => {
         if (!agreed) return;
 
-        // 👇 PRINT DATA WHEN SUBMIT IS PRESSED
+        // Debug logs
         console.log('📊 Benchmark Data:', benchmarkData);
         console.log('📈 Benchmark Results:', benchmarkResults);
         console.log('🖥️ System Specs:', systemSpecs);
@@ -30,7 +33,7 @@ export function SubmitResultsPage({
         setError(null);
 
         try {
-            const sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
             const modelNameToSubmit =
                 modelName || benchmarkResults?.modelName || 'Unknown Model';
@@ -40,19 +43,21 @@ export function SubmitResultsPage({
                 systemSpecs,
                 benchmarkData,
                 benchmarkResults,
-                sessionId
+                sessionId,
             });
 
             if (result.success) {
                 onSubmit();
             } else {
-                // ✅ Proper error handling for all result types
                 let errorMessage = 'Failed to submit benchmark';
 
                 if ('error' in result && result.error) {
                     errorMessage = result.error;
                 } else if ('errorDetails' in result && result.errorDetails) {
-                    errorMessage = result.errorDetails.message || result.errorDetails.hint || errorMessage;
+                    errorMessage =
+                        result.errorDetails.message ||
+                        result.errorDetails.hint ||
+                        errorMessage;
                 }
 
                 setError(errorMessage);
@@ -65,32 +70,45 @@ export function SubmitResultsPage({
         }
     };
 
-
     return (
-        <div className="min-h-screen bg-black text-white p-6 flex items-center justify-center">
-            <div className="max-w-4xl w-full space-y-6">
+        <div className="min-h-screen bg-[#18191c] text-[#b0b4bb] p-6 flex items-center justify-center">
+            <div className="max-w-5xl w-full space-y-6 pt-30">
+
+                {/* ================= Header ================= */}
                 <div className="text-center space-y-3">
-                    <h1 className="text-4xl font-bold tracking-wide
-                        drop-shadow-[0_0_14px_rgba(34,197,94,0.6)]">
+                    <h1
+                        className="text-4xl font-bold tracking-wide text-[#f2f3f5]"
+
+                    >
                         Submit Your Results
                     </h1>
-                    <p className="text-gray-400 text-lg">
+                    <p className="text-[#7d818a] text-lg">
                         Help build a community benchmark database
                     </p>
                 </div>
 
+                {/* ================= Results Cards ================= */}
                 <SystemAndBenchmarkCards
                     systemSpecs={systemSpecs}
                     benchmarkData={benchmarkData}
                     benchmarkResults={benchmarkResults}
                 />
 
+                {/* ================= Error ================= */}
                 {error && (
-                    <div className="bg-red-900/30 border border-red-500 rounded-lg p-4 text-center">
-                        <p className="text-red-400">{error}</p>
+                    <div
+                        className="rounded-lg p-4 text-center border"
+                        style={{
+                            backgroundColor: '#2a1d1d',
+                            borderColor: '#7a3535',
+                            color: '#fca5a5',
+                        }}
+                    >
+                        {error}
                     </div>
                 )}
 
+                {/* ================= Privacy / Submit ================= */}
                 <PrivacyConsentSection
                     agreed={agreed}
                     onAgreedChange={setAgreed}
@@ -99,7 +117,8 @@ export function SubmitResultsPage({
                     isSubmitting={isSubmitting}
                 />
 
-                <p className="text-center text-sm text-gray-500">
+                {/* ================= Footer Note ================= */}
+                <p className="text-center text-sm text-[#7d818a]">
                     You can choose to submit or skip at any time
                 </p>
             </div>

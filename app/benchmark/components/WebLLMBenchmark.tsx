@@ -32,6 +32,8 @@ interface RawBenchmarkRun {
     response?: string;
 }
 
+const BRAND_GREEN = '#4fbf8a';
+
 export default function WebLLMBenchmark() {
     const [model, setModel] = useState('Llama-3.2-1B-Instruct-q4f16_1-MLC');
     const [showGPU, setShowGPU] = useState(false);
@@ -168,17 +170,19 @@ export default function WebLLMBenchmark() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-6 pt-30">
+        <div className="min-h-screen bg-[#0a0b0d] text-white p-6 pt-24">
             <div className="max-w-6xl mx-auto space-y-6">
 
-                <h1 className="text-4xl font-bold text-center tracking-wide
-                    drop-shadow-[0_0_14px_rgba(34,197,94,0.6)]">
+                <h1 className="text-4xl font-bold text-center tracking-wide text-[#f2f3f5]"
+                    style={{
+                        textShadow: `0 0 20px ${BRAND_GREEN}40, 0 0 40px ${BRAND_GREEN}20`
+                    }}>
                     WebLLM Benchmark Suite
                 </h1>
 
-                <div className="rounded-xl bg-black/80 backdrop-blur p-4
-                    border border-emerald-500/20
-                    shadow-[0_0_22px_rgba(16,185,129,0.15)]">
+                <div className="rounded-xl bg-[#18191c] backdrop-blur p-4
+                    border border-[#34363c]
+                    shadow-lg hover:shadow-xl transition-shadow">
                     <ModelSelector
                         selectedModel={model}
                         setSelectedModel={setModel}
@@ -192,27 +196,28 @@ export default function WebLLMBenchmark() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowGPU(true)}
-                        className="px-4 py-2 rounded-lg border transition
-                            border-emerald-500/30 text-gray-300 
-                            hover:bg-emerald-500/10 hover:border-emerald-400"
+                        className="px-4 py-2 rounded-lg border transition-all
+                            border-[#34363c] text-[#b0b4bb] bg-[#18191c]
+                            hover:border-[#4fbf8a] hover:text-[#4fbf8a] 
+                            hover:bg-[#4fbf8a]/5"
                     >
                         GPU Specs
                     </button>
                     {gpuInfo && (
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-[#b0b4bb]">
                             ✓ {gpuInfo.unmaskedRenderer || gpuInfo.renderer || 'Detecting...'}
                         </span>
                     )}
                     {!gpuInfo && (
-                        <span className="text-xs text-yellow-500 animate-pulse">
+                        <span className="text-xs text-[#4fbf8a] animate-pulse">
                             Detecting GPU...
                         </span>
                     )}
                 </div>
 
-                <div className="rounded-xl bg-black/80 p-4
-                    border border-emerald-500/20
-                    shadow-[0_0_22px_rgba(16,185,129,0.15)]">
+                <div className="rounded-xl bg-[#18191c] p-4
+                    border border-[#34363c]
+                    shadow-lg hover:shadow-xl transition-shadow">
                     <BenchmarkPanel
                         disabled={!modelLoaded}
                         runPrompt={generate}
@@ -224,20 +229,20 @@ export default function WebLLMBenchmark() {
                     <button
                         onClick={handleSubmitResults}
                         disabled={!modelLoaded || !gpuInfo || !benchmarkResults}
-                        className="px-8 py-3 rounded-lg border transition
-                            border-emerald-400 bg-emerald-500/10 text-white 
-                            shadow-[0_0_12px_rgba(16,185,129,0.4)]
-                            hover:bg-emerald-500/20
-                            disabled:opacity-50 disabled:cursor-not-allowed
-                            disabled:shadow-none font-medium"
+                        className="px-8 py-3 rounded-lg border transition-all font-medium
+                            border-[#4fbf8a] bg-[#4fbf8a]/10 text-[#f2f3f5]
+                            hover:bg-[#4fbf8a]/20 hover:shadow-lg
+                            hover:shadow-[#4fbf8a]/20
+                            disabled:opacity-40 disabled:cursor-not-allowed
+                            disabled:hover:bg-[#4fbf8a]/10 disabled:hover:shadow-none"
                     >
                         Submit Results
                     </button>
                 </div>
 
                 {specs && (
-                    <div className="rounded-xl bg-black/70 p-4 text-sm
-                        border border-emerald-500/10 text-gray-400">
+                    <div className="rounded-xl bg-[#18191c] p-4 text-sm
+                        border border-[#34363c] text-[#b0b4bb]">
                         <div className="flex flex-wrap gap-4">
                             <span>CPU: {specs.cpuCores} cores</span>
                             <span>RAM: {specs.deviceMemory ? `${specs.deviceMemory} GB` : 'N/A'}</span>

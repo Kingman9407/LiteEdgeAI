@@ -1,9 +1,6 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import * as webllm from "@mlc-ai/web-llm";
-
-/* ------------------ ModelSelector ------------------ */
+import { useState } from 'react';
 
 interface ModelSelectorProps {
     selectedModel: string;
@@ -14,6 +11,10 @@ interface ModelSelectorProps {
     status: string;
 }
 
+const BRAND_GREEN = '#4fbf8a';
+const BUTTON_GREEN = '#3fa77a';
+const BUTTON_HOVER = '#357a5a';
+
 export function ModelSelector({
     selectedModel,
     setSelectedModel,
@@ -23,16 +24,31 @@ export function ModelSelector({
     status,
 }: ModelSelectorProps) {
     const models = [
-        { id: "TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC", name: "TinyLlama 1.1B (Light)" },
-        { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", name: "Llama 3.2 1B (Fastest)" },
-        { id: "Phi-3-mini-4k-instruct-q4f16_1-MLC", name: "Phi-3 Mini (Balanced)" },
-        { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", name: "Qwen 2.5 1.5B" },
+        { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', name: 'TinyLlama 1.1B (Light)' },
+        { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', name: 'Llama 3.2 1B (Fastest)' },
+        { id: 'Phi-3-mini-4k-instruct-q4f16_1-MLC', name: 'Phi-3 Mini (Balanced)' },
+        { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', name: 'Qwen 2.5 1.5B' },
     ];
 
     return (
-        <div className="bg-white/10 p-4 rounded space-y-3">
+        <div
+            className="p-4 rounded-lg space-y-3"
+            style={{
+                backgroundColor: '#18191c',
+            }}
+        >
+            {/* Model dropdown */}
             <select
-                className="w-full bg-black/30 p-3 rounded"
+                className="
+          w-full p-3 rounded
+          bg-[#232428]
+          border border-[#34363c]
+          text-[#f2f3f5]
+          focus:outline-none
+        "
+                style={{
+                    borderColor: modelLoaded ? '#34363c' : `${BRAND_GREEN}55`,
+                }}
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={modelLoaded}
@@ -44,24 +60,45 @@ export function ModelSelector({
                 ))}
             </select>
 
+            {/* Load / Unload button */}
             {!modelLoaded ? (
                 <button
                     onClick={loadModel}
-                    className="w-full bg-purple-600 py-3 rounded"
+                    className="w-full py-3 rounded-md text-white font-medium transition"
+                    style={{ backgroundColor: BUTTON_GREEN }}
+                    onMouseEnter={e =>
+                        (e.currentTarget.style.backgroundColor = BUTTON_HOVER)
+                    }
+                    onMouseLeave={e =>
+                        (e.currentTarget.style.backgroundColor = BUTTON_GREEN)
+                    }
                 >
                     Load Model
                 </button>
             ) : (
                 <button
                     onClick={unloadModel}
-                    className="w-full bg-red-600 py-3 rounded"
+                    className="w-full py-3 rounded-md font-medium transition"
+                    style={{
+                        backgroundColor: '#7a3535',
+                        color: '#f2f3f5',
+                    }}
+                    onMouseEnter={e =>
+                        (e.currentTarget.style.backgroundColor = '#5f2a2a')
+                    }
+                    onMouseLeave={e =>
+                        (e.currentTarget.style.backgroundColor = '#7a3535')
+                    }
                 >
                     Unload Model
                 </button>
             )}
 
+            {/* Status */}
             {status && (
-                <p className="text-xs font-mono opacity-80">{status}</p>
+                <p className="text-xs font-mono text-[#7d818a]">
+                    {status}
+                </p>
             )}
         </div>
     );
