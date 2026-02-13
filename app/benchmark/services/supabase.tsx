@@ -6,20 +6,20 @@ import type { PCSpecs, BenchmarkData, BenchmarkResults, GPUInfo } from '../types
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!;
 
-console.log('=== SUPABASE INITIALIZATION DEBUG ===');
-console.log('Supabase URL:', supabaseUrl);
-console.log('Supabase Key exists:', !!supabaseKey);
-console.log('Supabase Key length:', supabaseKey?.length);
-console.log('Environment:', process.env.NODE_ENV);
-console.log('=====================================');
-
 if (!supabaseUrl || !supabaseKey) {
-    console.error('❌ CRITICAL: Missing Supabase credentials');
-    console.error('URL present:', !!supabaseUrl);
-    console.error('Key present:', !!supabaseKey);
+    throw new Error('Missing Supabase configuration. Check environment variables.');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Dev-only logger — completely silent in production
+const isDev = process.env.NODE_ENV === 'development';
+function devLog(...args: unknown[]) {
+    if (isDev) console.log(...args);
+}
+function devError(...args: unknown[]) {
+    if (isDev) console.error(...args);
+}
 
 // Type definitions
 interface SubmitBenchmarkParams {
@@ -43,26 +43,15 @@ export async function submitBenchmarkToSupabase({
     fullGPUInfo,
     sessionId
 }: SubmitBenchmarkParams) {
-    console.log('🚀 === SUBMIT BENCHMARK DEBUG START ===');
-    console.log('Timestamp:', new Date().toISOString());
+    devLog('Submitting benchmark for model:', modelName);
 
     try {
-        // Log input parameters
-        console.log('📊 Input Parameters:');
-        console.log('  Model Name:', modelName);
-        console.log('  Session ID:', sessionId);
-        console.log('  System Specs:', JSON.stringify(systemSpecs, null, 2));
-        console.log('  Benchmark Data:', JSON.stringify(benchmarkData, null, 2));
-        console.log('  Benchmark Results:', JSON.stringify(benchmarkResults, null, 2));
 
         const modelFamily = extractModelFamily(modelName);
         const modelSize = extractModelSize(modelName);
         const gpuName = benchmarkData.normalizedGPU || 'Unknown GPU';
 
-        console.log('🔍 Extracted Values:');
-        console.log('  Model Family:', modelFamily);
-        console.log('  Model Size:', modelSize);
-        console.log('  GPU Name:', gpuName);
+        devLog('Extracted:', { modelFamily, modelSize, gpuName });
 
         // Prepare RPC parameters matching your original structure
         const rpcParams = {
@@ -95,60 +84,34 @@ export async function submitBenchmarkToSupabase({
             p_session_id: sessionId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         };
 
-        console.log('📤 RPC Parameters:', JSON.stringify(rpcParams, null, 2));
-        console.log('⏳ Calling insert_benchmark_data RPC...');
+        devLog('Calling insert_benchmark_data RPC...');
 
         // Call the RPC function
         const { data, error } = await supabase.rpc('insert_benchmark_data', rpcParams);
 
         if (error) {
-            console.error('❌ === RPC ERROR DETAILS ===');
-            console.error('Error Object:', error);
-            console.error('Error Message:', error.message);
-            console.error('Error Code:', error.code);
-            console.error('Error Details:', error.details);
-            console.error('Error Hint:', error.hint);
-            console.error('========================');
+            devError('RPC Error:', error.message, error.code);
 
             return {
                 success: false,
-                error: error.message || JSON.stringify(error),
-                errorDetails: {
-                    code: error.code,
-                    details: error.details,
-                    hint: error.hint,
-                    message: error.message
-                }
+                error: error.message || 'Submission failed'
             };
         }
 
-        console.log('✅ RPC Success!');
-        console.log('Response Data:', JSON.stringify(data, null, 2));
+        devLog('Benchmark submitted successfully');
 
         const result = {
             success: true,
             data: data
         };
 
-        console.log('📊 Final Result:', JSON.stringify(result, null, 2));
-        console.log('✅ === SUBMIT BENCHMARK DEBUG END ===');
-
         return result;
     } catch (error) {
-        console.error('❌ === CATCH BLOCK ERROR ===');
-        console.error('Error Type:', typeof error);
-        console.error('Error:', error);
-
-        if (error instanceof Error) {
-            console.error('Error Message:', error.message);
-            console.error('Error Stack:', error.stack);
-        }
+        devError('Submit benchmark error:', error instanceof Error ? error.message : error);
 
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            errorType: error?.constructor?.name || typeof error,
-            errorStack: error instanceof Error ? error.stack : undefined
+            error: error instanceof Error ? error.message : 'Unknown error'
         };
     }
 }
@@ -157,8 +120,6 @@ export async function submitBenchmarkToSupabase({
  * Get all GPUs tested for a specific model
  */
 export async function getModelGPUs(modelName: string) {
-    console.log('📊 getModelGPUs called');
-    console.log('  Model Name:', modelName);
 
     try {
         const { data, error } = await supabase
@@ -174,14 +135,14 @@ export async function getModelGPUs(modelName: string) {
             .single();
 
         if (error) {
-            console.error('❌ Error fetching model GPUs:', error);
+            devError('Error fetching model GPUs:', error.message);
             return null;
         }
 
-        console.log('✅ Model GPUs fetched:', data?.gpu_sessions?.length || 0, 'sessions');
+        devLog('Model GPUs fetched:', data?.gpu_sessions?.length || 0, 'sessions');
         return data;
     } catch (error) {
-        console.error('❌ Exception in getModelGPUs:', error);
+        devError('Exception in getModelGPUs:', error);
         return null;
     }
 }
@@ -190,8 +151,6 @@ export async function getModelGPUs(modelName: string) {
  * Get benchmarks for a specific GPU and model
  */
 export async function getGPUBenchmarks(modelName: string, gpuName: string) {
-    console.log('📊 getGPUBenchmarks called');
-    console.log('  Model:', modelName, 'GPU:', gpuName);
 
     try {
         const { data, error } = await supabase
@@ -209,14 +168,14 @@ export async function getGPUBenchmarks(modelName: string, gpuName: string) {
             .single();
 
         if (error) {
-            console.error('❌ Error fetching GPU benchmarks:', error);
+            devError('Error fetching GPU benchmarks:', error.message);
             return null;
         }
 
-        console.log('✅ GPU Benchmarks fetched');
+        devLog('GPU Benchmarks fetched');
         return data;
     } catch (error) {
-        console.error('❌ Exception in getGPUBenchmarks:', error);
+        devError('Exception in getGPUBenchmarks:', error);
         return null;
     }
 }
@@ -225,7 +184,6 @@ export async function getGPUBenchmarks(modelName: string, gpuName: string) {
  * Get all models with their GPU test counts
  */
 export async function getAllModels() {
-    console.log('📊 getAllModels called');
 
     try {
         const { data, error } = await supabase
@@ -242,7 +200,7 @@ export async function getAllModels() {
             .order('created_at', { ascending: false });
 
         if (error) {
-            console.error('❌ Error fetching models:', error);
+            devError('Error fetching models:', error.message);
             return null;
         }
 
@@ -262,10 +220,10 @@ export async function getAllModels() {
 
         }));
 
-        console.log('✅ Models fetched:', processedData?.length || 0);
+        devLog('Models fetched:', processedData?.length || 0);
         return processedData;
     } catch (error) {
-        console.error('❌ Exception in getAllModels:', error);
+        devError('Exception in getAllModels:', error);
         return null;
     }
 }
@@ -274,7 +232,6 @@ export async function getAllModels() {
  * Get GPU performance comparison across all models
  */
 export async function getGPULeaderboard(limit: number = 50) {
-    console.log('📊 getGPULeaderboard called');
 
     try {
         const { data, error } = await supabase
@@ -295,14 +252,14 @@ export async function getGPULeaderboard(limit: number = 50) {
             .limit(limit);
 
         if (error) {
-            console.error('❌ Error fetching GPU leaderboard:', error);
+            devError('Error fetching GPU leaderboard:', error.message);
             return null;
         }
 
-        console.log('✅ GPU Leaderboard fetched:', data?.length || 0, 'entries');
+        devLog('GPU Leaderboard fetched:', data?.length || 0, 'entries');
         return data;
     } catch (error) {
-        console.error('❌ Exception in getGPULeaderboard:', error);
+        devError('Exception in getGPULeaderboard:', error);
         return null;
     }
 }
@@ -311,7 +268,6 @@ export async function getGPULeaderboard(limit: number = 50) {
  * Get recent benchmark submissions
  */
 export async function getRecentBenchmarks(limit: number = 10) {
-    console.log('📊 getRecentBenchmarks called');
 
     try {
         const { data, error } = await supabase
@@ -332,14 +288,14 @@ export async function getRecentBenchmarks(limit: number = 10) {
             .limit(limit);
 
         if (error) {
-            console.error('❌ Error fetching recent benchmarks:', error);
+            devError('Error fetching recent benchmarks:', error.message);
             return null;
         }
 
-        console.log('✅ Recent benchmarks fetched:', data?.length || 0);
+        devLog('Recent benchmarks fetched:', data?.length || 0);
         return data;
     } catch (error) {
-        console.error('❌ Exception in getRecentBenchmarks:', error);
+        devError('Exception in getRecentBenchmarks:', error);
         return null;
     }
 }
@@ -348,7 +304,9 @@ export async function getRecentBenchmarks(limit: number = 10) {
  * Search GPUs by name
  */
 export async function searchGPUs(searchTerm: string) {
-    console.log('🔍 searchGPUs called:', searchTerm);
+    // Sanitize search input to prevent PostgREST filter injection
+    const sanitized = searchTerm.replace(/[^a-zA-Z0-9\s\-_.]/g, '').trim();
+    if (!sanitized) return [];
 
     try {
         const { data, error } = await supabase
@@ -362,18 +320,18 @@ export async function searchGPUs(searchTerm: string) {
                     model_name
                 )
             `)
-            .or(`gpu_name.ilike.%${searchTerm}%,gpu_brand.ilike.%${searchTerm}%`)
+            .or(`gpu_name.ilike.%${sanitized}%,gpu_brand.ilike.%${sanitized}%`)
             .limit(20);
 
         if (error) {
-            console.error('❌ Error searching GPUs:', error);
+            devError('Error searching GPUs:', error.message);
             return null;
         }
 
-        console.log('✅ GPU search completed:', data?.length || 0, 'results');
+        devLog('GPU search completed:', data?.length || 0, 'results');
         return data;
     } catch (error) {
-        console.error('❌ Exception in searchGPUs:', error);
+        devError('Exception in searchGPUs:', error);
         return null;
     }
 }
@@ -382,7 +340,6 @@ export async function searchGPUs(searchTerm: string) {
  * Get statistics for a specific GPU across all models
  */
 export async function getGPUStats(gpuName: string) {
-    console.log('📊 getGPUStats called:', gpuName);
 
     try {
         const { data, error } = await supabase
@@ -399,7 +356,7 @@ export async function getGPUStats(gpuName: string) {
             .order('tokens_per_second', { ascending: false });
 
         if (error) {
-            console.error('❌ Error fetching GPU stats:', error);
+            devError('Error fetching GPU stats:', error.message);
             return null;
         }
 
@@ -419,10 +376,10 @@ export async function getGPUStats(gpuName: string) {
             sessions: data
         };
 
-        console.log('✅ GPU stats calculated');
+        devLog('GPU stats calculated');
         return stats;
     } catch (error) {
-        console.error('❌ Exception in getGPUStats:', error);
+        devError('Exception in getGPUStats:', error);
         return null;
     }
 }

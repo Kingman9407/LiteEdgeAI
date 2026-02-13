@@ -137,15 +137,7 @@ export default function About1() {
                 </div>
             </section>
 
-            {/* Footer */}
-            <footer className="py-8 px-4 border-t border-[#34363c]">
-                <div className="max-w-4xl mx-auto text-center text-[#b0b4bb] text-sm">
-                    <p>
-                        © {new Date().getFullYear()} LiteEdgeAI. All rights
-                        reserved.
-                    </p>
-                </div>
-            </footer>
+
         </div>
     );
 }

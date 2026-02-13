@@ -24,11 +24,6 @@ export function SubmitResultsPage({
     const handleSubmit = async () => {
         if (!agreed) return;
 
-        // Debug logs
-        console.log('📊 Benchmark Data:', benchmarkData);
-        console.log('📈 Benchmark Results:', benchmarkResults);
-        console.log('🖥️ System Specs:', systemSpecs);
-
         setIsSubmitting(true);
         setError(null);
 
@@ -49,21 +44,9 @@ export function SubmitResultsPage({
             if (result.success) {
                 onSubmit();
             } else {
-                let errorMessage = 'Failed to submit benchmark';
-
-                if ('error' in result && result.error) {
-                    errorMessage = result.error;
-                } else if ('errorDetails' in result && result.errorDetails) {
-                    errorMessage =
-                        result.errorDetails.message ||
-                        result.errorDetails.hint ||
-                        errorMessage;
-                }
-
-                setError(errorMessage);
+                setError('error' in result ? result.error : 'Failed to submit benchmark');
             }
         } catch (err) {
-            console.error('Error submitting benchmark:', err);
             setError(err instanceof Error ? err.message : 'An unexpected error occurred');
         } finally {
             setIsSubmitting(false);

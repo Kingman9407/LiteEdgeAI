@@ -170,7 +170,7 @@ export default function WebLLMBenchmark() {
     }
 
     return (
-        <div className="min-h-screen bg-[#0a0b0d] text-white p-6 pt-24">
+        <div className=" bg-[#0a0b0d] text-white p-6 pt-24">
             <div className="max-w-6xl mx-auto space-y-6">
 
                 <h1 className="text-4xl font-bold text-center tracking-wide text-[#f2f3f5]"
