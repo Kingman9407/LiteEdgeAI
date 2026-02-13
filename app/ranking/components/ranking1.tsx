@@ -26,7 +26,7 @@ export default function RankingsPage() {
             setLoading(true);
             const { data, error } = await supabase
                 .from("gpu_leaderboard_live")
-                .select("*")
+                .select("model_name, gpu_name, gpu_brand, normalized_gpu_name, performance_score, tokens_per_second, avg_benchmark_tps, load_time")
                 .order("tokens_per_second", { ascending: false });
 
             if (!error) setData(data || []);
@@ -84,7 +84,7 @@ export default function RankingsPage() {
                             bg-[#232428]
                             border border-[#34363c]
                             text-[#f2f3f5]
-                            placeholder-[#7d818a]
+                            placeholder-[#9ca0a8]
                             focus:outline-none
                             focus:border-[#4fbf8a]
                         "
@@ -131,25 +131,25 @@ export default function RankingsPage() {
                 {!loading && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-4">
-                            <div className="text-[#7d818a] text-sm">Total GPUs</div>
+                            <div className="text-[#9ca0a8] text-sm">Total GPUs</div>
                             <div className="text-2xl font-bold text-[#f2f3f5] mt-1">
                                 {filteredData.length}
                             </div>
                         </div>
                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-4">
-                            <div className="text-[#7d818a] text-sm">Models Tested</div>
+                            <div className="text-[#9ca0a8] text-sm">Models Tested</div>
                             <div className="text-2xl font-bold text-[#f2f3f5] mt-1">
                                 {uniqueModels.length}
                             </div>
                         </div>
                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-4">
-                            <div className="text-[#7d818a] text-sm">Top Speed</div>
+                            <div className="text-[#9ca0a8] text-sm">Top Speed</div>
                             <div className="text-2xl font-bold text-[#4fbf8a] mt-1">
                                 {filteredData[0]?.tokens_per_second.toFixed(1) || 0} t/s
                             </div>
                         </div>
                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-4">
-                            <div className="text-[#7d818a] text-sm">Avg Benchmark</div>
+                            <div className="text-[#9ca0a8] text-sm">Avg Benchmark</div>
                             <div className="text-2xl font-bold text-[#f2f3f5] mt-1">
                                 {(filteredData.reduce((sum, item) => sum + (item.avg_benchmark_tps || 0), 0) / filteredData.length || 0).toFixed(1)} t/s
                             </div>
@@ -169,7 +169,7 @@ export default function RankingsPage() {
                 {!loading && (
                     <div className="overflow-x-auto rounded-xl border border-[#34363c] bg-[#232428]">
                         <table className="w-full">
-                            <thead className="border-b border-[#34363c] text-[#7d818a]">
+                            <thead className="border-b border-[#34363c] text-[#9ca0a8]">
                                 <tr>
                                     <th className="p-4 text-left">Rank</th>
                                     <th className="p-4 text-left">GPU</th>
@@ -214,7 +214,7 @@ export default function RankingsPage() {
                         </table>
 
                         {filteredData.length === 0 && (
-                            <p className="py-12 text-center text-[#7d818a]">
+                            <p className="py-12 text-center text-[#9ca0a8]">
                                 No GPUs found matching your filters
                             </p>
                         )}

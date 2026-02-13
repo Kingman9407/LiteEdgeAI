@@ -38,7 +38,7 @@ export default function JoinOurCommunity() {
 
                     {/* Discord */}
                     <a
-                        href="https://discord.gg/YOUR_INVITE_CODE"
+                        href="https://discord.gg/teTMMXC7"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-3 px-6 py-3
@@ -54,7 +54,7 @@ export default function JoinOurCommunity() {
 
                 </div>
 
-                <p className="mt-6 text-sm text-[#7d818a] max-w-3xl">
+                <p className="mt-6 text-sm text-[#9ca0a8] max-w-3xl">
                     No sign-up required to benchmark. Join the Discord to collaborate,
                     propose edge-AI projects, and help shape future experiments.
                 </p>

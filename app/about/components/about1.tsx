@@ -15,12 +15,12 @@ export default function About1() {
                         <Image src={logo} alt="LiteEdgeAI Logo" width={80} height={80} />
                     </div>
                     <h1 className="text-4xl md:text-5xl font-bold mb-6">
-                        About{' '}
-                        <span style={{ color: BRAND_GREEN }}>LiteEdgeAI</span>
+                        About <span style={{ color: BRAND_GREEN }}>LiteEdgeAI</span>
                     </h1>
                     <p className="text-lg text-[#b0b4bb] leading-relaxed">
-                        Empowering the future of edge computing with lightweight,
-                        efficient AI models designed for real-world deployment.
+                        LiteEdgeAI is a benchmarking and exploration platform focused on
+                        lightweight AI models and their behavior on edge oriented hardware.
+                        The goal is to provide clarity through measurement rather than claims.
                     </p>
                 </div>
             </section>
@@ -31,19 +31,19 @@ export default function About1() {
                     <div className="grid md:grid-cols-3 gap-8">
                         {[
                             {
-                                title: 'Our Mission',
+                                title: 'Purpose',
                                 content:
-                                    'To democratize AI by making state-of-the-art models accessible and deployable on edge devices, from smartphones to IoT sensors.',
+                                    'To study and compare lightweight AI models in practical, constrained environments such as edge devices and local systems.',
                             },
                             {
-                                title: 'Our Vision',
+                                title: 'Perspective',
                                 content:
-                                    'A world where intelligent AI runs everywhere, enabling privacy-first, low-latency applications without relying on cloud infrastructure.',
+                                    'We view edge AI as a trade-off space involving performance, efficiency, and hardware limits rather than a one-size-fits-all solution.',
                             },
                             {
-                                title: 'Our Approach',
+                                title: 'Method',
                                 content:
-                                    'Rigorous benchmarking, transparent rankings, and community-driven evaluation of lightweight models across diverse tasks.',
+                                    'Models are evaluated using consistent benchmarks and clearly defined metrics so results can be interpreted in context.',
                             },
                         ].map((item, idx) => (
                             <div
@@ -69,25 +69,25 @@ export default function About1() {
             <section className="py-16 px-4 bg-[#18191c]">
                 <div className="max-w-4xl mx-auto">
                     <h2 className="text-3xl font-bold text-center mb-12">
-                        What We Do
+                        What We Focus On
                     </h2>
                     <div className="space-y-6">
                         {[
                             {
-                                title: 'Comprehensive Benchmarking',
-                                desc: 'We evaluate AI models across multiple dimensions: accuracy, latency, memory footprint, and energy efficiency.',
+                                title: 'Benchmarking',
+                                desc: 'We measure model behavior across latency, throughput, memory usage, and energy consumption.',
                             },
                             {
-                                title: 'Transparent Rankings',
-                                desc: 'Our leaderboards provide clear, data-driven insights to help developers choose the right model for their use case.',
+                                title: 'Comparative Analysis',
+                                desc: 'Results are presented side-by-side to highlight relative differences rather than absolute rankings.',
                             },
                             {
-                                title: 'Edge-First Focus',
-                                desc: 'Every benchmark is designed with real-world edge deployment scenarios in mind, not just theoretical performance.',
+                                title: 'Hardware Awareness',
+                                desc: 'Benchmarks are run with specific hardware constraints in mind, including CPUs, GPUs, and NPUs.',
                             },
                             {
-                                title: 'Open Community',
-                                desc: 'We believe in open science. Our methodologies, datasets, and results are transparent and reproducible.',
+                                title: 'Transparency',
+                                desc: 'Benchmark setups, assumptions, and limitations are documented to avoid misleading conclusions.',
                             },
                         ].map((item, idx) => (
                             <div
@@ -106,37 +106,6 @@ export default function About1() {
             </section>
 
             {/* Team Section */}
-            <section className="py-16 px-4">
-                <div className="max-w-4xl mx-auto text-center">
-                    <h2 className="text-3xl font-bold mb-6">Our Team</h2>
-                    <p className="text-[#b0b4bb] mb-12 leading-relaxed">
-                        We're a diverse group of AI researchers, engineers, and
-                        enthusiasts passionate about making AI more accessible and
-                        efficient. Our team combines expertise in machine learning,
-                        embedded systems, and software engineering.
-                    </p>
-                    <div className="inline-block bg-[#18191c] border border-[#34363c] rounded-xl px-8 py-4">
-                        <p className="text-[#b0b4bb]">
-                            Interested in collaborating?{' '}
-                            <a
-                                href="mailto:contact@liteedgeai.com"
-                                className="font-semibold transition-colors"
-                                style={{ color: BRAND_GREEN }}
-                                onMouseEnter={e =>
-                                (e.currentTarget.style.textDecoration =
-                                    'underline')
-                                }
-                                onMouseLeave={e =>
-                                    (e.currentTarget.style.textDecoration = 'none')
-                                }
-                            >
-                                Get in touch
-                            </a>
-                        </p>
-                    </div>
-                </div>
-            </section>
-
 
         </div>
     );

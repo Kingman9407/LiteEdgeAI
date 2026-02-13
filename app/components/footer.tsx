@@ -2,9 +2,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import logo from '../assets/icons/logo1w.png';
 
-// Optional: force static generation
-export const dynamic = 'force-static';
-
 export default function Footer() {
     return (
         <footer className="bg-[#18191c] border-t border-[#34363c]">
@@ -29,22 +26,26 @@ export default function Footer() {
                         </Link>
 
                         <p className="text-[#b0b4bb] text-sm max-w-md mb-4">
-                            Independent rankings and benchmarks for edge AI hardware.
-                            Compare NPUs, GPUs, and SoCs across real-world edge AI workloads,
-                            power efficiency, and performance metrics.
+                            LiteEdgeAI delivers independent, real-world benchmarks focused exclusively on GPU performance across all devices.
+                            Compare integrated and discrete GPUs using inference speed, throughput, power efficiency, and
                         </p>
 
                         {/* Social Links */}
+                        {/* Social Links */}
                         <div className="flex gap-4">
+                            {/* GitHub */}
+
+
+                            {/* Discord */}
                             <a
-                                href="https://github.com/liteedgeai"
+                                href="https://discord.gg/teTMMXC7"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-[#b0b4bb] hover:text-[#4fbf8a] transition"
-                                aria-label="GitHub"
+                                aria-label="Discord"
                             >
                                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                                    <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                                    <path d="M20.317 4.369a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.211.375-.444.864-.608 1.249a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.249.077.077 0 00-.079-.037 19.736 19.736 0 00-4.885 1.515.069.069 0 00-.032.027C.533 9.046-.319 13.58.099 18.057a.082.082 0 00.031.056 19.9 19.9 0 005.993 3.03.077.077 0 00.084-.027c.461-.63.873-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128c.125-.094.25-.192.368-.291a.074.074 0 01.077-.01c3.927 1.793 8.18 1.793 12.061 0a.074.074 0 01.078.009c.118.099.243.198.369.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.106c.36.699.772 1.364 1.225 1.994a.076.076 0 00.084.028 19.876 19.876 0 006.002-3.03.077.077 0 00.032-.055c.5-5.177-.838-9.673-3.548-13.66a.061.061 0 00-.031-.028zM8.02 15.331c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.418 2.157-2.418 1.21 0 2.176 1.095 2.157 2.418 0 1.334-.955 2.419-2.157 2.419zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.418 2.157-2.418 1.21 0 2.176 1.095 2.157 2.418 0 1.334-.946 2.419-2.157 2.419z" />
                                 </svg>
                             </a>
                         </div>
@@ -69,7 +70,7 @@ export default function Footer() {
                             Resources
                         </h3>
                         <ul className="space-y-3 text-sm">
-                            <li><Link href="/documentation" className="text-[#b0b4bb] hover:text-[#4fbf8a] transition">Benchmark Methodology</Link></li>
+                            <li><Link href="/working" className="text-[#b0b4bb] hover:text-[#4fbf8a] transition">Benchmark Methodology</Link></li>
                             <li><Link href="/credits" className="text-[#b0b4bb] hover:text-[#4fbf8a] transition">Credits</Link></li>
                         </ul>
                     </nav>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -36,7 +35,7 @@ export default function HowItWorksPage() {
                 <div className="rounded-xl bg-gradient-to-br from-[#4fbf8a]/10 to-transparent 
                     border border-[#4fbf8a]/30 p-6 shadow-lg">
                     <h2 className="text-2xl font-semibold mb-3 text-[#4fbf8a]">
-                        🚀 The Big Picture
+                        Overview
                     </h2>
                     <p className="text-[#b0b4bb] leading-relaxed">
                         This benchmark runs large language models (LLMs) completely in your browser
@@ -51,8 +50,8 @@ export default function HowItWorksPage() {
 
                     {/* Section 1: WebGPU */}
                     <Section
-                        title="1. WebGPU: Your Browser's GPU Power"
-                        icon="⚡"
+                        title="WebGPU: Your Browser's GPU Power"
+                        number="01"
                         isActive={activeSection === 'webgpu'}
                         onToggle={() => toggleSection('webgpu')}
                     >
@@ -85,8 +84,8 @@ export default function HowItWorksPage() {
 
                     {/* Section 2: Model Loading */}
                     <Section
-                        title="2. Loading the AI Model"
-                        icon="📦"
+                        title="Loading the AI Model"
+                        number="02"
                         isActive={activeSection === 'loading'}
                         onToggle={() => toggleSection('loading')}
                     >
@@ -129,8 +128,8 @@ export default function HowItWorksPage() {
 
                     {/* Section 3: Benchmark Tests */}
                     <Section
-                        title="3. Running Benchmarks"
-                        icon="🏃"
+                        title="Running Benchmarks"
+                        number="03"
                         isActive={activeSection === 'benchmarks'}
                         onToggle={() => toggleSection('benchmarks')}
                     >
@@ -186,8 +185,8 @@ export default function HowItWorksPage() {
 
                     {/* Section 4: GPU Detection */}
                     <Section
-                        title="4. System Detection"
-                        icon="🔍"
+                        title="System Detection"
+                        number="04"
                         isActive={activeSection === 'detection'}
                         onToggle={() => toggleSection('detection')}
                     >
@@ -198,7 +197,6 @@ export default function HowItWorksPage() {
 
                             <div className="space-y-3">
                                 <DetectionItem
-                                    icon="🎮"
                                     title="GPU Information"
                                     items={[
                                         'Vendor (NVIDIA, AMD, Intel, Apple)',
@@ -209,7 +207,6 @@ export default function HowItWorksPage() {
                                 />
 
                                 <DetectionItem
-                                    icon="💻"
                                     title="System Specs"
                                     items={[
                                         'CPU cores (via hardwareConcurrency)',
@@ -232,8 +229,8 @@ export default function HowItWorksPage() {
 
                     {/* Section 5: Results */}
                     <Section
-                        title="5. Understanding Your Results"
-                        icon="📊"
+                        title="Understanding Your Results"
+                        number="05"
                         isActive={activeSection === 'results'}
                         onToggle={() => toggleSection('results')}
                     >
@@ -281,7 +278,7 @@ export default function HowItWorksPage() {
                 {/* Technical Deep Dive */}
                 <div className="rounded-xl bg-[#18191c] border border-[#34363c] p-6">
                     <h2 className="text-2xl font-semibold mb-4 text-[#f2f3f5]">
-                        🔬 Technical Deep Dive
+                        Technical Deep Dive
                     </h2>
 
                     <div className="space-y-4 text-sm text-[#b0b4bb]">
@@ -342,13 +339,13 @@ export default function HowItWorksPage() {
 
 interface SectionProps {
     title: string;
-    icon: string;
+    number: string;
     isActive: boolean;
     onToggle: () => void;
     children: React.ReactNode;
 }
 
-function Section({ title, icon, isActive, onToggle, children }: SectionProps) {
+function Section({ title, number, isActive, onToggle, children }: SectionProps) {
     return (
         <div className="rounded-xl bg-[#18191c] border border-[#34363c] overflow-hidden
             hover:border-[#4fbf8a]/30 transition-all">
@@ -357,13 +354,17 @@ function Section({ title, icon, isActive, onToggle, children }: SectionProps) {
                 className="w-full p-4 flex items-center justify-between
                     hover:bg-[#232428]/50 transition-colors"
             >
-                <div className="flex items-center gap-3">
-                    <span className="text-2xl">{icon}</span>
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-[#4fbf8a]/10 border border-[#4fbf8a]/30 
+                        flex items-center justify-center font-mono font-bold text-[#4fbf8a]">
+                        {number}
+                    </div>
                     <h3 className="text-xl font-semibold text-[#f2f3f5]">{title}</h3>
                 </div>
-                <span className="text-[#4fbf8a] text-xl">
+                <div className="w-8 h-8 rounded-full border border-[#4fbf8a]/50 
+                    flex items-center justify-center text-[#4fbf8a]">
                     {isActive ? '−' : '+'}
-                </span>
+                </div>
             </button>
 
             {isActive && (
@@ -439,18 +440,14 @@ function Metric({ label, description }: MetricProps) {
 }
 
 interface DetectionItemProps {
-    icon: string;
     title: string;
     items: string[];
 }
 
-function DetectionItem({ icon, title, items }: DetectionItemProps) {
+function DetectionItem({ title, items }: DetectionItemProps) {
     return (
         <div className="bg-[#18191c] rounded-lg p-4 border border-[#34363c]">
-            <div className="flex items-center gap-2 mb-3">
-                <span className="text-xl">{icon}</span>
-                <h4 className="font-semibold text-[#f2f3f5]">{title}</h4>
-            </div>
+            <h4 className="font-semibold text-[#f2f3f5] mb-3">{title}</h4>
             <ul className="space-y-1 text-sm text-[#b0b4bb]">
                 {items.map((item, i) => (
                     <li key={i}>• {item}</li>

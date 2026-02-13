@@ -89,12 +89,10 @@ export default function WebLLMBenchmark() {
 
     const handleSubmitResults = () => {
         if (!gpuInfo) {
-            console.error('GPU info not yet detected — waiting...');
             return;
         }
 
         if (rawBenchmarkRuns.length === 0) {
-            console.error('No benchmark runs to submit');
             return;
         }
 
@@ -134,21 +132,13 @@ export default function WebLLMBenchmark() {
         const processed = BenchmarkDataProcessor.processCompleteSession(rawSession);
         setProcessedData(processed);
 
-        console.log('=== Processed Session ===');
-        console.log('System:', processed.systemSpecs);
-        console.log('GPU:', processed.fullGPUInfo);
-        console.log('Benchmark Data:', processed.benchmarkData);
-        console.log('Results:', processed.benchmarkResults);
-
         setShowSubmitPage(true);
     };
 
     const handleActualSubmit = () => {
         if (!processedData) {
-            console.error('No processed data available');
             return;
         }
-        console.log('Submitting:', processedData);
         // TODO: fetch('/api/submit-benchmark', { method: 'POST', body: JSON.stringify(processedData) })
         setShowSubmitPage(false);
     };
@@ -177,8 +167,14 @@ export default function WebLLMBenchmark() {
                     style={{
                         textShadow: `0 0 20px ${BRAND_GREEN}40, 0 0 40px ${BRAND_GREEN}20`
                     }}>
-                    WebLLM Benchmark Suite
+                    WebLLM Benchmark
                 </h1>
+
+                <div className="text-center text-sm text-[#b0b4bb]">
+                    <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#18191c] border border-[#34363c]">
+                        Best experienced on Chrome or browsers with WebGPU support
+                    </span>
+                </div>
 
                 <div className="rounded-xl bg-[#18191c] backdrop-blur p-4
                     border border-[#34363c]

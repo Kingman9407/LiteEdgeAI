@@ -65,7 +65,7 @@ export function SubmitResultsPage({
                     >
                         Submit Your Results
                     </h1>
-                    <p className="text-[#7d818a] text-lg">
+                    <p className="text-[#9ca0a8] text-lg">
                         Help build a community benchmark database
                     </p>
                 </div>
@@ -101,7 +101,7 @@ export function SubmitResultsPage({
                 />
 
                 {/* ================= Footer Note ================= */}
-                <p className="text-center text-sm text-[#7d818a]">
+                <p className="text-center text-sm text-[#9ca0a8]">
                     You can choose to submit or skip at any time
                 </p>
             </div>

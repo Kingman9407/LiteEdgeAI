@@ -105,7 +105,7 @@ export function PrivacyConsentSection({
                     className="flex-1 py-3 rounded-lg font-semibold transition"
                     style={{
                         backgroundColor: agreed && !isSubmitting ? BUTTON_GREEN : '#34363c',
-                        color: agreed && !isSubmitting ? '#ffffff' : '#7d818a',
+                        color: agreed && !isSubmitting ? '#ffffff' : '#9ca0a8',
                         cursor: agreed && !isSubmitting ? 'pointer' : 'not-allowed',
                     }}
                     onMouseEnter={(e) => {

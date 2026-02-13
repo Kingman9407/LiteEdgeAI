@@ -5,8 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import logo from '../assets/icons/logo1w.png';
 
-const BRAND_GREEN = '#4fbf8a';
-
 export default function Navbar() {
     const [open, setOpen] = useState(false);
 
@@ -26,10 +24,7 @@ export default function Navbar() {
                 <Link href="/" className="flex items-center gap-2 group">
                     <Image src={logo} alt="LiteEdgeAI Logo" width={40} height={40} priority />
                     <span
-                        className="text-xl font-semibold text-[#f2f3f5] transition"
-                        style={{ color: '#f2f3f5' }}
-                        onMouseEnter={e => (e.currentTarget.style.color = BRAND_GREEN)}
-                        onMouseLeave={e => (e.currentTarget.style.color = '#f2f3f5')}
+                        className="text-xl font-semibold text-[#f2f3f5] hover:text-[#4fbf8a] transition-colors"
                     >
                         LiteEdgeAI
                     </span>
@@ -37,13 +32,11 @@ export default function Navbar() {
 
                 {/* Desktop Links */}
                 <div className="hidden md:flex gap-6 text-[#b0b4bb]">
-                    {['Home', 'Ranking', 'Benchmark', 'About', 'Blogs',].map(item => (
+                    {['Home', 'Ranking', 'Benchmark',].map(item => (
                         <Link
                             key={item}
                             href={`/${item === 'Home' ? '' : item.toLowerCase()}`}
-                            className="transition"
-                            onMouseEnter={e => (e.currentTarget.style.color = BRAND_GREEN)}
-                            onMouseLeave={e => (e.currentTarget.style.color = '#b0b4bb')}
+                            className="text-[#b0b4bb] hover:text-[#4fbf8a] transition-colors"
                         >
                             {item}
                         </Link>
@@ -60,9 +53,7 @@ export default function Navbar() {
                         {[0, 1, 2].map(i => (
                             <span
                                 key={i}
-                                className="block h-0.5 w-6 bg-[#b0b4bb] transition"
-                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = BRAND_GREEN)}
-                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#b0b4bb')}
+                                className="block h-0.5 w-6 bg-[#b0b4bb] hover:bg-[#4fbf8a] transition-colors"
                             />
                         ))}
                     </div>
@@ -73,14 +64,12 @@ export default function Navbar() {
             {open && (
                 <div className="md:hidden border-t border-[#34363c] bg-[#232428] rounded-b-xl">
                     <div className="flex flex-col px-4 py-4 space-y-4 text-[#b0b4bb]">
-                        {['Home', 'Ranking', 'Benchmark', 'About', 'Blogs',].map(item => (
+                        {['Home', 'Ranking', 'Benchmark',].map(item => (
                             <Link
                                 key={item}
                                 href={`/${item === 'Home' ? '' : item.toLowerCase()}`}
                                 onClick={() => setOpen(false)}
-                                className="transition"
-                                onMouseEnter={e => (e.currentTarget.style.color = BRAND_GREEN)}
-                                onMouseLeave={e => (e.currentTarget.style.color = '#b0b4bb')}
+                                className="text-[#b0b4bb] hover:text-[#4fbf8a] transition-colors"
                             >
                                 {item}
                             </Link>

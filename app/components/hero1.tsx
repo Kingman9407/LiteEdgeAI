@@ -22,7 +22,7 @@ export default function Hero() {
 
                     <Link href="/ranking">
                         <span className="px-6 py-3 rounded-md border border-[#34363c] hover:bg-[#232428] transition">
-                            View Ranking
+                            View Rankings
                         </span>
                     </Link>
                 </div>

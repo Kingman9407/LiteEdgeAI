@@ -86,7 +86,7 @@ export function SystemAndBenchmarkCards({
                 {fullGPUInfo?.capabilities?.length && (
                     <div className="space-y-3 pt-3 border-t border-[#4fbf8a]/20">
                         <div className="rounded-lg bg-[#4fbf8a]/10 border border-[#4fbf8a]/20 p-3">
-                            <div className="text-xs text-[#7d818a] uppercase tracking-wide mb-2">
+                            <div className="text-xs text-[#9ca0a8] uppercase tracking-wide mb-2">
                                 GPU Capabilities
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -106,7 +106,7 @@ export function SystemAndBenchmarkCards({
                 {fullGPUInfo && (
                     <div className="space-y-3 pt-3 border-t border-[#4fbf8a]/20">
                         <div className="rounded-lg bg-[#4fbf8a]/10 border border-[#4fbf8a]/20 p-3">
-                            <div className="text-xs text-[#7d818a] uppercase tracking-wide mb-2">
+                            <div className="text-xs text-[#9ca0a8] uppercase tracking-wide mb-2">
                                 Technical Details
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -148,21 +148,21 @@ export function SystemAndBenchmarkCards({
                     <div className="space-y-3">
                         {benchmarkData.performanceScore != null && (
                             <div className="rounded-lg bg-[#4fbf8a]/10 border border-[#4fbf8a]/20 p-3">
-                                <div className="text-xs text-[#7d818a] uppercase tracking-wide mb-1">
+                                <div className="text-xs text-[#9ca0a8] uppercase tracking-wide mb-1">
                                     Performance Score
                                 </div>
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-3xl font-bold text-[#4fbf8a]">
                                         {benchmarkData.performanceScore}
                                     </span>
-                                    <span className="text-[#7d818a]">/100</span>
+                                    <span className="text-[#9ca0a8]">/100</span>
                                 </div>
                             </div>
                         )}
 
                         {benchmarkData.performanceTier && (
                             <div className="rounded-lg bg-[#4fbf8a]/10 border border-[#4fbf8a]/20 p-3">
-                                <div className="text-xs text-[#7d818a] uppercase tracking-wide mb-1">
+                                <div className="text-xs text-[#9ca0a8] uppercase tracking-wide mb-1">
                                     Performance Tier
                                 </div>
                                 <div className={`font-medium ${getTierColor(benchmarkData.performanceTier)}`}>
@@ -196,7 +196,7 @@ export function SystemAndBenchmarkCards({
                 {benchmarkResults?.benchmarks?.length && (
                     <div className="space-y-3 pt-3 border-t border-[#4fbf8a]/20">
                         <div className="rounded-lg bg-[#4fbf8a]/10 border border-[#4fbf8a]/20 p-3">
-                            <div className="text-xs text-[#7d818a] uppercase tracking-wide mb-3">
+                            <div className="text-xs text-[#9ca0a8] uppercase tracking-wide mb-3">
                                 Individual Test Results
                             </div>
                             <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -234,7 +234,7 @@ export function SystemAndBenchmarkCards({
 function SpecItem({ label, value }: { label: string; value: string | number }) {
     return (
         <div className="rounded-lg bg-[#4fbf8a]/10 border border-[#4fbf8a]/20 p-3">
-            <div className="text-xs text-[#7d818a] uppercase tracking-wide mb-1">
+            <div className="text-xs text-[#9ca0a8] uppercase tracking-wide mb-1">
                 {label}
             </div>
             <div className="text-[#f2f3f5] font-medium">
@@ -247,7 +247,7 @@ function SpecItem({ label, value }: { label: string; value: string | number }) {
 function TechItem({ label, value }: { label: string; value: string | number }) {
     return (
         <div className="rounded bg-[#4fbf8a]/10 border border-[#4fbf8a]/20 p-2">
-            <div className="text-[#7d818a] mb-1">
+            <div className="text-[#9ca0a8] mb-1">
                 {label}
             </div>
             <div className="text-[#f2f3f5] font-mono">
@@ -260,7 +260,7 @@ function TechItem({ label, value }: { label: string; value: string | number }) {
 function MiniStat({ label, value }: { label: string; value: string | number }) {
     return (
         <div>
-            <div className="text-[#7d818a]">{label}</div>
+            <div className="text-[#9ca0a8]">{label}</div>
             <div className="text-[#f2f3f5] font-mono">{value}</div>
         </div>
     );

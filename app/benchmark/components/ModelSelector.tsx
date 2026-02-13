@@ -96,7 +96,7 @@ export function ModelSelector({
 
             {/* Status */}
             {status && (
-                <p className="text-xs font-mono text-[#7d818a]">
+                <p className="text-xs font-mono text-[#9ca0a8]">
                     {status}
                 </p>
             )}

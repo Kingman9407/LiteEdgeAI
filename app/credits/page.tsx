@@ -79,7 +79,7 @@ export default function CreditsPage() {
                                 </div>
 
                                 <div className="pt-4 border-t border-[#34363c]">
-                                    <div className="flex gap-6 text-sm text-[#7d818a]">
+                                    <div className="flex gap-6 text-sm text-[#9ca0a8]">
                                         <span><strong className="text-[#f2f3f5]">License:</strong> Apache 2.0</span>
                                         <span><strong className="text-[#f2f3f5]">Version:</strong> 0.2.80</span>
                                         <span><strong className="text-[#f2f3f5]">Creators:</strong> MLC-AI Team</span>
@@ -145,25 +145,25 @@ export default function CreditsPage() {
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-3">
                                             <div className="font-medium text-[#f2f3f5]">TinyLlama 1.1B</div>
-                                            <div className="text-xs text-[#7d818a]">TinyLlama team</div>
+                                            <div className="text-xs text-[#9ca0a8]">TinyLlama team</div>
                                         </div>
                                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-3">
                                             <div className="font-medium text-[#f2f3f5]">Llama 3.2 1B</div>
-                                            <div className="text-xs text-[#7d818a]">Meta AI</div>
+                                            <div className="text-xs text-[#9ca0a8]">Meta AI</div>
                                         </div>
                                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-3">
                                             <div className="font-medium text-[#f2f3f5]">Phi-3 Mini</div>
-                                            <div className="text-xs text-[#7d818a]">Microsoft</div>
+                                            <div className="text-xs text-[#9ca0a8]">Microsoft</div>
                                         </div>
                                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-3">
                                             <div className="font-medium text-[#f2f3f5]">Qwen 2.5 1.5B</div>
-                                            <div className="text-xs text-[#7d818a]">Alibaba Cloud</div>
+                                            <div className="text-xs text-[#9ca0a8]">Alibaba Cloud</div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="pt-4 border-t border-[#34363c]">
-                                    <div className="flex gap-6 text-sm text-[#7d818a]">
+                                    <div className="flex gap-6 text-sm text-[#9ca0a8]">
                                         <span><strong className="text-[#f2f3f5]">Platform:</strong> Model hosting & distribution</span>
                                         <span><strong className="text-[#f2f3f5]">Founded:</strong> 2016</span>
                                     </div>
@@ -175,7 +175,7 @@ export default function CreditsPage() {
 
                     {/* Footer Note */}
                     <section className="mt-16 pt-8 border-t border-[#34363c]">
-                        <p className="text-center text-[#7d818a] leading-relaxed">
+                        <p className="text-center text-[#9ca0a8] leading-relaxed">
                             These two projects are the backbone of LiteEdgeAI. We are deeply grateful to the MLC-AI
                             team and Hugging Face for building and maintaining the infrastructure that makes
                             browser-based AI benchmarking possible. All open-source licenses are respected and followed.
