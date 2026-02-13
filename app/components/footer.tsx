@@ -60,7 +60,6 @@ export default function Footer() {
                             <li><Link href="/" className="text-[#b0b4bb] hover:text-[#4fbf8a] transition">Home</Link></li>
                             <li><Link href="/ranking" className="text-[#b0b4bb] hover:text-[#4fbf8a] transition">Hardware Rankings</Link></li>
                             <li><Link href="/benchmark" className="text-[#b0b4bb] hover:text-[#4fbf8a] transition">Hardware Benchmarks</Link></li>
-                            <li><Link href="/about" className="text-[#b0b4bb] hover:text-[#4fbf8a] transition">About LiteEdgeAI</Link></li>
                         </ul>
                     </nav>
 
