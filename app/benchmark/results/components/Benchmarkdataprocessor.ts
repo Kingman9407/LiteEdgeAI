@@ -290,14 +290,35 @@ const GPU_DATABASE: Record<string, GPUEntry> = {
     'arc a310': { displayName: 'Intel Arc A310', brand: 'Intel', vram: '4 GB', type: 'discrete' },
 
     // ── Intel Integrated ──
+    'iris xe graphics': { displayName: 'Intel Iris Xe Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'iris xe': { displayName: 'Intel Iris Xe Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'iris plus graphics': { displayName: 'Intel Iris Plus Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'iris plus': { displayName: 'Intel Iris Plus Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'iris pro graphics': { displayName: 'Intel Iris Pro Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'iris pro': { displayName: 'Intel Iris Pro Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 770': { displayName: 'Intel UHD Graphics 770 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 730': { displayName: 'Intel UHD Graphics 730 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 630': { displayName: 'Intel UHD Graphics 630 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 620': { displayName: 'Intel UHD Graphics 620 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 617': { displayName: 'Intel UHD Graphics 617 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 615': { displayName: 'Intel UHD Graphics 615 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 610': { displayName: 'Intel UHD Graphics 610 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 605': { displayName: 'Intel UHD Graphics 605 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics 600': { displayName: 'Intel UHD Graphics 600 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'uhd graphics': { displayName: 'Intel UHD Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'uhd 770': { displayName: 'Intel UHD 770 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'uhd 730': { displayName: 'Intel UHD 730 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'uhd 630': { displayName: 'Intel UHD 630 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'uhd 620': { displayName: 'Intel UHD 620 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'uhd 600': { displayName: 'Intel UHD 600 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics 630': { displayName: 'Intel HD Graphics 630 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics 530': { displayName: 'Intel HD Graphics 530 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics 520': { displayName: 'Intel HD Graphics 520 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics 515': { displayName: 'Intel HD Graphics 515 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics 510': { displayName: 'Intel HD Graphics 510 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics 505': { displayName: 'Intel HD Graphics 505 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics 500': { displayName: 'Intel HD Graphics 500 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
+    'hd graphics': { displayName: 'Intel HD Graphics (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'hd 630': { displayName: 'Intel HD 630 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'hd 530': { displayName: 'Intel HD 530 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
     'hd 520': { displayName: 'Intel HD 520 (Integrated)', brand: 'Intel', vram: 'Shared Memory', type: 'integrated' },
@@ -372,24 +393,32 @@ const GPU_DATABASE_KEYS_SORTED = Object.keys(GPU_DATABASE).sort((a, b) => b.leng
 
 /**
  * Cleans a raw renderer string: strips ANGLE wrappers, common prefixes,
- * normalizes whitespace, lowercases.
+ * normalizes whitespace, lowercases. PRESERVES important model identifiers.
  */
 function cleanRendererString(raw?: string): string {
     if (!raw) return '';
     let s = raw;
 
-    // Strip ANGLE wrapper: "ANGLE (NVIDIA GeForce RTX 4090 ...)" → inner content
-    const angleMatch = s.match(/ANGLE\s*\(\s*(.+?)\s*\)\s*$/i);
-    if (angleMatch) s = angleMatch[1];
+    // Extract content from ANGLE wrapper: "ANGLE (Intel, Intel(R) UHD Graphics ...)" → inner content
+    const angleMatch = s.match(/ANGLE\s*\(\s*([^,]+),\s*(.+?)\s*(?:Direct3D|OpenGL|Vulkan|D3D|,|$)/i);
+    if (angleMatch) {
+        // angleMatch[1] = vendor (e.g., "Intel")
+        // angleMatch[2] = actual GPU model (e.g., "Intel(R) UHD Graphics (0x000046B3)")
+        s = angleMatch[2];
+    }
 
-    // Strip trailing Direct3D/OpenGL/Vulkan backend info
+    // Strip trailing backend info
     s = s.replace(/Direct3D\d*/gi, '').replace(/vs_\d+_\d+/gi, '').replace(/ps_\d+_\d+/gi, '');
-    s = s.replace(/OpenGL\s*Engine/gi, '');
+    s = s.replace(/OpenGL\s*Engine/gi, '').replace(/D3D\d*/gi, '');
 
-    // Strip common vendor prefixes that appear before the model
-    s = s.replace(/\b(NVIDIA|AMD|ATI|Intel(\(R\))?|Apple)\b/gi, '');
+    // Strip device IDs in parentheses like (0x000046B3) but preserve other parenthetical info
+    s = s.replace(/\(0x[0-9a-f]+\)/gi, '');
 
-    // Strip "(R)", "(TM)", "Corporation", "Inc."
+    // Strip common vendor prefixes and trademark symbols
+    s = s.replace(/\bIntel\(R\)\s*/gi, '');
+    s = s.replace(/\bNVIDIA\s*/gi, '');
+    s = s.replace(/\bAMD\s*/gi, '');
+    s = s.replace(/\bATI\s*/gi, '');
     s = s.replace(/\(R\)/gi, '').replace(/\(TM\)/gi, '');
     s = s.replace(/\bCorporation\b/gi, '').replace(/\bInc\.?\b/gi, '');
 
@@ -659,8 +688,9 @@ export class BenchmarkDataProcessor {
             gpuBrand = lookup.entry.brand;
             gpuType = lookup.entry.type;
         } else {
-            // No match in database — use raw renderer, detect brand via fallback
-            normalizedGPU = effectiveRenderer || 'Unknown GPU';
+            // No match in database — use cleaned renderer as display name
+            const cleaned = cleanRendererString(effectiveRenderer);
+            normalizedGPU = cleaned || effectiveRenderer || 'Unknown GPU';
             gpuBrand = detectGPUBrandFallback(effectiveRenderer, effectiveVendor);
             gpuType = gpuBrand === 'Intel' ? 'integrated' : 'discrete';
         }
