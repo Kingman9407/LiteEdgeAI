@@ -13,15 +13,15 @@ export default function Hero() {
                     Benchmark and rank your hardware based on real AI performance
                 </h2>
 
-                <div className="mt-6 flex justify-center gap-4">
+                <div className="mt-6 flex justify-center gap-3 sm:gap-6">
                     <Link href="/benchmark" prefetch>
-                        <span className="px-6 py-3 rounded-md text-white font-medium bg-[#3fa77a] hover:bg-[#357a5a] transition">
+                        <span className="px-3 sm:px-6 py-3 rounded-md text-xs sm:text-base text-white font-medium bg-[#3fa77a] hover:bg-[#357a5a] transition">
                             Run Benchmark
                         </span>
                     </Link>
 
                     <Link href="/ranking">
-                        <span className="px-6 py-3 rounded-md border border-[#34363c] hover:bg-[#232428] transition">
+                        <span className="px-3 sm:px-6 py-3 rounded-md text-xs sm:text-base border border-[#34363c] hover:bg-[#232428] transition">
                             View Rankings
                         </span>
                     </Link>
