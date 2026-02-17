@@ -28,6 +28,7 @@ export function ModelSelector({
         { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', name: 'Llama 3.2 1B (Fastest)' },
         { id: 'Phi-3-mini-4k-instruct-q4f16_1-MLC', name: 'Phi-3 Mini (Balanced)' },
         { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', name: 'Qwen 2.5 1.5B' },
+        { id: 'Mistral-7B-Instruct-v0.2-q4f16_1-MLC', name: 'Mistral 7B (Powerful)' },
     ];
 
     return (

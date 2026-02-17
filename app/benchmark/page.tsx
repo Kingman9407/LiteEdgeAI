@@ -5,6 +5,7 @@ import WebLLMBenchmark from './components/WebLLMBenchmark';
 import Navbar from '../components/navbar';
 import Footer from '../components/footer';
 import CreditsCTA from './components/benchcredits';
+import BenchmarkingProcedurePage from './components/properworking';
 
 export const metadata: Metadata = {
     title: "Run AI Benchmark in Browser",
@@ -62,6 +63,7 @@ export default function BenchmarkPage() {
 
             <Navbar />
             <WebLLMBenchmark />
+            <BenchmarkingProcedurePage />
             <CreditsCTA />
             <Footer />
         </main>
