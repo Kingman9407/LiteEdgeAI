@@ -72,10 +72,13 @@ export default function WebLLMBenchmark() {
     }) => {
         setBenchmarkResults(results);
 
+        // FIX: Use real startTime/endTime captured during each benchmark run,
+        // instead of reconstructing them all from a single Date.now() call
+        // which caused all runs to share the same endTime and corrupt TPS scoring.
         const rawRuns: RawBenchmarkRun[] = results.benchmarks.map(bench => ({
             testName: bench.name,
-            startTime: Date.now() - (bench.totalTime * 1000),
-            endTime: Date.now(),
+            startTime: bench.startTime,   // real wall-clock start from BenchmarkPanel
+            endTime: bench.endTime,       // real wall-clock end from BenchmarkPanel
             tokenCount: bench.tokenCount,
             wordCount: bench.wordCount,
             modelUsed: model,

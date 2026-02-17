@@ -99,6 +99,8 @@ export type BenchmarkResult = {
     wordCount: number;
     charCount: number;
     tokensPerSecond: number;
+    startTime: number;
+    endTime: number;
 };
 
 export type BenchmarkResults = {

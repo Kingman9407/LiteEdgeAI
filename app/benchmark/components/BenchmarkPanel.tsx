@@ -33,13 +33,18 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
             setCurrent(i + 1);
             const test = tests[i];
 
-            const start = performance.now();
+            // FIX: Capture real wall-clock timestamps for each run
+            const wallStart = Date.now();
+            const perfStart = performance.now();
+
             const res = await runPrompt(test.prompt);
-            const time = (performance.now() - start) / 1000;
+
+            const wallEnd = Date.now();
+            const time = (performance.now() - perfStart) / 1000;
 
             const words = res.trim().split(/\s+/).length;
             const chars = res.length;
-            const tokens = Math.round(words * 1.3); // rough token estimate
+            const tokens = Math.round(words * 1.3);
 
             temp.push({
                 name: test.name,
@@ -50,6 +55,9 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                 wordCount: words,
                 charCount: chars,
                 tokensPerSecond: tokens / time,
+                // FIX: Real timestamps captured during the run, not reconstructed after
+                startTime: wallStart,
+                endTime: wallEnd,
             });
 
             setResults([...temp]);
@@ -98,8 +106,8 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                 <button
                     onClick={() => setMode('normal')}
                     className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${mode === 'normal'
-                            ? 'bg-[#4fbf8a] text-white'
-                            : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
+                        ? 'bg-[#4fbf8a] text-white'
+                        : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
                         }`}
                 >
                     Normal
@@ -107,8 +115,8 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                 <button
                     onClick={() => setMode('hard')}
                     className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${mode === 'hard'
-                            ? 'bg-[#4fbf8a] text-white'
-                            : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
+                        ? 'bg-[#4fbf8a] text-white'
+                        : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
                         }`}
                 >
                     Hard

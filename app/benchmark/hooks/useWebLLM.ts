@@ -9,6 +9,18 @@ interface DeviceCapabilities {
     isMobile: boolean;
 }
 
+// Fixed context window per model (not based on RAM)
+const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+    'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC': 2048,
+    'Llama-3.2-1B-Instruct-q4f16_1-MLC': 4096,
+    'Llama-3.2-3B-Instruct-q4f16_1-MLC': 4096,
+    'Phi-3-mini-4k-instruct-q4f16_1-MLC': 4096,
+    'Qwen2.5-1.5B-Instruct-q4f16_1-MLC': 4096,
+    'Mistral-7B-Instruct-v0.2-q4f16_1-MLC': 4096,
+};
+
+const DEFAULT_CONTEXT_WINDOW = 4096;
+
 export function useWebLLM() {
     const engineRef = useRef<webllm.MLCEngine | null>(null);
     const [modelLoaded, setModelLoaded] = useState(false);
@@ -51,7 +63,7 @@ export function useWebLLM() {
             return 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
         }
 
-        return 'TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC';
+        return 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
     };
 
     // -------- Context / token helpers --------
@@ -61,15 +73,10 @@ export function useWebLLM() {
     };
 
     // Use up to ~90% of the context window for (prompt + completion)
+    // FIX: Uses fixed contextWindowSize (set per model), NOT memoryGB
     const computeMaxTokensFor90PctCtx = (prompt: string): number => {
-        // Fallback if contextWindowSize not set yet
-        const ctx =
-            contextWindowSize ??
-            ((capabilities?.memoryGB || 4) >= 8
-                ? 4096
-                : (capabilities?.memoryGB || 4) >= 4
-                    ? 2048
-                    : 1024);
+        // Use model-specific context window, not RAM-based fallback
+        const ctx = contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
 
         const promptTokens = estimateTokens(prompt);
 
@@ -114,8 +121,8 @@ export function useWebLLM() {
                 setStatus(`📥 ${r.text}`);
             });
 
-            const ctx =
-                caps.memoryGB >= 8 ? 4096 : caps.memoryGB >= 4 ? 2048 : 1024;
+            // FIX: Use model-specific context window, not RAM-based
+            const ctx = MODEL_CONTEXT_WINDOWS[selectedModel] ?? DEFAULT_CONTEXT_WINDOW;
 
             await engine.reload(selectedModel, {
                 context_window_size: ctx,
