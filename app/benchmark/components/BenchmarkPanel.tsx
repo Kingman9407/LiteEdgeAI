@@ -13,8 +13,6 @@ interface Props {
     }) => void;
 }
 
-const BRAND_GREEN = '#4fbf8a';
-
 export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Props) {
     const [mode, setMode] = useState<BenchmarkMode>('normal');
     const [running, setRunning] = useState(false);
@@ -59,7 +57,6 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
 
         const totalLoadTime = (performance.now() - benchmarkStartTime) / 1000;
 
-        // Calculate average tokens per second and pass to parent
         const totalTime = temp.reduce((a, b) => a + b.totalTime, 0);
         const totalTokens = temp.reduce((a, b) => a + b.tokenCount, 0);
         const avgTokensPerSec = totalTokens / totalTime;
@@ -76,7 +73,6 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
         setRunning(false);
     };
 
-    /* ---------- Summary stats ---------- */
     const summary = useMemo(() => {
         if (results.length === 0) return null;
 
@@ -129,19 +125,14 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                     disabled:opacity-40 disabled:cursor-not-allowed
                     disabled:hover:bg-[#4fbf8a]/10"
             >
-                {running
-                    ? `Running ${current}/${tests.length}`
-                    : 'Run Benchmark'}
+                {running ? `Running ${current}/${tests.length}` : 'Run Benchmark'}
             </button>
 
             {/* Summary */}
             {summary && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <Stat label="Total Time" value={`${summary.totalTime.toFixed(2)}s`} />
-                    <Stat
-                        label="Avg Tokens/sec"
-                        value={summary.avgTokensPerSec.toFixed(1)}
-                    />
+                    <Stat label="Avg Tokens/sec" value={summary.avgTokensPerSec.toFixed(1)} />
                     <Stat label="Fastest Test" value={summary.fastest.name} />
                     <Stat label="Score" value={summary.score} />
                 </div>
@@ -163,18 +154,17 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                         </thead>
                         <tbody>
                             {results.map((r, i) => (
-                                <tr key={i} className="border-t border-[#34363c] hover:bg-[#232428]/30 transition-colors">
+                                <tr
+                                    key={i}
+                                    className="border-t border-[#34363c] hover:bg-[#232428]/30 transition-colors"
+                                >
                                     <td className="p-3 font-medium text-[#f2f3f5]">{r.name}</td>
                                     <td className="p-3 text-[#b0b4bb]">{r.totalTime.toFixed(2)}</td>
-                                    <td className="p-3 text-[#4fbf8a]">
-                                        {r.tokensPerSecond.toFixed(2)}
-                                    </td>
+                                    <td className="p-3 text-[#4fbf8a]">{r.tokensPerSecond.toFixed(2)}</td>
                                     <td className="p-3 text-[#b0b4bb]">{r.tokenCount}</td>
                                     <td className="p-3 text-[#b0b4bb]">{r.charCount}</td>
                                     <td className="p-3 max-w-xl text-[#b0b4bb]">
-                                        <div className="line-clamp-3">
-                                            {r.response}
-                                        </div>
+                                        <div className="line-clamp-3">{r.response}</div>
                                     </td>
                                 </tr>
                             ))}
@@ -186,7 +176,6 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
     );
 }
 
-/* ---------- Small stat card ---------- */
 function Stat({ label, value }: { label: string; value: string | number }) {
     return (
         <div className="rounded-lg bg-[#232428] border border-[#34363c] p-4">

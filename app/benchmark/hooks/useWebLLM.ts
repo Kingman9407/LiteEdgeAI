@@ -106,7 +106,11 @@ export function useWebLLM() {
         }
 
         try {
-            const maxTokens = options?.max_tokens || (capabilities?.memoryGB || 4) >= 8 ? 512 : 256;
+            // FIX: use ?? so options.max_tokens is respected when passed,
+            // and only falls back to memory-based heuristic when truly undefined.
+            // The old code used || which treated max_tokens as a boolean condition,
+            // causing the ternary to always fire and ignore the passed value.
+            const maxTokens = options?.max_tokens ?? ((capabilities?.memoryGB || 4) >= 8 ? 512 : 256);
 
             const reply = await engineRef.current.chat.completions.create({
                 messages: [{ role: 'user', content: prompt }],
@@ -130,7 +134,8 @@ export function useWebLLM() {
             throw new Error('Model not loaded. Please call loadModel first.');
         }
 
-        const maxTokens = options?.max_tokens || (capabilities?.memoryGB || 4) >= 8 ? 512 : 256;
+        // FIX: same fix as generate() above — ?? instead of ||
+        const maxTokens = options?.max_tokens ?? ((capabilities?.memoryGB || 4) >= 8 ? 512 : 256);
 
         const stream = await engineRef.current.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
