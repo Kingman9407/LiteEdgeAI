@@ -14,21 +14,19 @@ export function useWebLLM() {
     const [modelLoaded, setModelLoaded] = useState(false);
     const [status, setStatus] = useState('');
     const [capabilities, setCapabilities] = useState<DeviceCapabilities | null>(null);
+    const [contextWindowSize, setContextWindowSize] = useState<number | null>(null);
 
-    // Check device capabilities (WebGPU ONLY - NO FALLBACK)
+    // -------- Device capability check (WebGPU only) --------
     const checkDeviceCapabilities = async (): Promise<DeviceCapabilities | null> => {
         const hasWebGPU = !!navigator.gpu;
 
-        // STRICT: Stop immediately if no WebGPU
         if (!hasWebGPU) {
             setStatus('❌ WebGPU not supported. This application requires WebGPU.');
             return null;
         }
 
-        // Estimate device memory
         const memoryGB = (navigator as any).deviceMemory || 4;
 
-        // Check if mobile device
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
             navigator.userAgent
         );
@@ -43,37 +41,71 @@ export function useWebLLM() {
         return caps;
     };
 
-    // Recommend appropriate model based on device (WebGPU only)
+    // -------- Model recommendation based on device --------
     const recommendModel = (caps: DeviceCapabilities): string => {
-        // High-end devices
         if (caps.memoryGB >= 8 && !caps.isMobile) {
             return 'Llama-3.2-3B-Instruct-q4f16_1-MLC';
         }
 
-        // Mid-range devices or mobile
         if (caps.memoryGB >= 4) {
             return 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
         }
 
-        // Low-end devices - smallest model
         return 'TinyLlama-1.1B-Chat-v0.4-q4f16_1-MLC';
     };
 
+    // -------- Context / token helpers --------
+    const estimateTokens = (text: string): number => {
+        if (!text.trim()) return 0;
+        return Math.ceil(text.trim().split(/\s+/).length * 1.3);
+    };
+
+    // Use up to ~90% of the context window for (prompt + completion)
+    const computeMaxTokensFor90PctCtx = (prompt: string): number => {
+        // Fallback if contextWindowSize not set yet
+        const ctx =
+            contextWindowSize ??
+            ((capabilities?.memoryGB || 4) >= 8
+                ? 4096
+                : (capabilities?.memoryGB || 4) >= 4
+                    ? 2048
+                    : 1024);
+
+        const promptTokens = estimateTokens(prompt);
+
+        // Target total tokens (prompt + completion) = 90% of ctx
+        const targetTotal = Math.floor(ctx * 0.9);
+
+        let budget = targetTotal - promptTokens;
+
+        // Safety margin for tokenizer mismatch
+        budget -= 32;
+
+        // Clamp budget
+        budget = Math.max(16, budget);
+        budget = Math.min(budget, ctx - promptTokens - 16);
+
+        return budget;
+    };
+
+    // -------- Load model --------
     const loadModel = async (modelId?: string) => {
         try {
             setStatus('🔍 Checking WebGPU support…');
             const caps = await checkDeviceCapabilities();
 
-            // STRICT: Stop if no WebGPU - NO FALLBACK
             if (!caps || !caps.hasWebGPU) {
-                setStatus('❌ WebGPU is required. Please use a browser that supports WebGPU (Chrome 113+, Edge 113+).');
+                setStatus(
+                    '❌ WebGPU is required. Please use a browser that supports WebGPU (Chrome 113+, Edge 113+).'
+                );
                 return;
             }
 
-            // Use provided model or recommend one
             const selectedModel = modelId || recommendModel(caps);
 
-            setStatus(`🔄 Initializing WebLLM with WebGPU on ${caps.isMobile ? 'mobile' : 'desktop'} device…`);
+            setStatus(
+                `🔄 Initializing WebLLM with WebGPU on ${caps.isMobile ? 'mobile' : 'desktop'} device…`
+            );
             setModelLoaded(false);
 
             const engine = new webllm.MLCEngine();
@@ -82,14 +114,17 @@ export function useWebLLM() {
                 setStatus(`📥 ${r.text}`);
             });
 
+            const ctx =
+                caps.memoryGB >= 8 ? 4096 : caps.memoryGB >= 4 ? 2048 : 1024;
+
             await engine.reload(selectedModel, {
-                // Adjust context window based on device memory
-                context_window_size: caps.memoryGB >= 8 ? 4096 : caps.memoryGB >= 4 ? 2048 : 1024,
+                context_window_size: ctx,
             });
 
             engineRef.current = engine;
+            setContextWindowSize(ctx);
             setModelLoaded(true);
-            setStatus(`✅ Model loaded successfully with WebGPU! (${selectedModel})`);
+            setStatus(`✅ Model loaded successfully with WebGPU! (${selectedModel}, ctx=${ctx})`);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             setStatus(`❌ Error loading model: ${errorMessage}`);
@@ -97,20 +132,21 @@ export function useWebLLM() {
         }
     };
 
-    const generate = async (prompt: string, options?: {
-        temperature?: number;
-        max_tokens?: number;
-    }) => {
+    // -------- Non-streaming generation --------
+    const generate = async (
+        prompt: string,
+        options?: {
+            temperature?: number;
+            max_tokens?: number;
+        }
+    ) => {
         if (!engineRef.current) {
             throw new Error('Model not loaded. Please call loadModel first.');
         }
 
         try {
-            // FIX: use ?? so options.max_tokens is respected when passed,
-            // and only falls back to memory-based heuristic when truly undefined.
-            // The old code used || which treated max_tokens as a boolean condition,
-            // causing the ternary to always fire and ignore the passed value.
-            const maxTokens = options?.max_tokens ?? ((capabilities?.memoryGB || 4) >= 8 ? 512 : 256);
+            const maxTokens =
+                options?.max_tokens ?? computeMaxTokensFor90PctCtx(prompt);
 
             const reply = await engineRef.current.chat.completions.create({
                 messages: [{ role: 'user', content: prompt }],
@@ -126,6 +162,7 @@ export function useWebLLM() {
         }
     };
 
+    // -------- Streaming generation --------
     const generateStream = async function* (
         prompt: string,
         options?: { temperature?: number; max_tokens?: number }
@@ -134,8 +171,8 @@ export function useWebLLM() {
             throw new Error('Model not loaded. Please call loadModel first.');
         }
 
-        // FIX: same fix as generate() above — ?? instead of ||
-        const maxTokens = options?.max_tokens ?? ((capabilities?.memoryGB || 4) >= 8 ? 512 : 256);
+        const maxTokens =
+            options?.max_tokens ?? computeMaxTokensFor90PctCtx(prompt);
 
         const stream = await engineRef.current.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
@@ -152,11 +189,13 @@ export function useWebLLM() {
         }
     };
 
+    // -------- Unload model --------
     const unloadModel = async () => {
         if (engineRef.current) {
             await engineRef.current.unload();
             engineRef.current = null;
             setModelLoaded(false);
+            setContextWindowSize(null);
             setStatus('Model unloaded');
         }
     };
@@ -166,6 +205,7 @@ export function useWebLLM() {
         modelLoaded,
         status,
         capabilities,
+        contextWindowSize,
         loadModel,
         generate,
         generateStream,
