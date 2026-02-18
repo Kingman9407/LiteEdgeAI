@@ -103,6 +103,7 @@ export interface BenchmarkResult {
     firstTokenLatencyMs: number;
     startTime: number;
     endTime: number;
+
 }
 
 export interface BenchmarkResults {
@@ -111,6 +112,8 @@ export interface BenchmarkResults {
     loadTime: number;
     score: number;
     benchmarks: BenchmarkResult[];
+    maxTokens?: number;              // <-- make optional
+    firstTokenLatencyMs?: number;
 }
 
 export interface BenchmarkData {

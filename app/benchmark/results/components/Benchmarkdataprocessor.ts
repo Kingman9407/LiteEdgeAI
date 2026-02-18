@@ -44,6 +44,8 @@ interface RawBenchmarkRun {
     loadTimeMs?: number;
     prompt?: string;
     response?: string;
+    maxTokens?: number;
+    firstTokenLatencyMs?: number;
 }
 
 export interface RawBenchmarkSession {
@@ -573,7 +575,6 @@ export class BenchmarkDataProcessor {
         }
 
         const benchmarks: BenchmarkResult[] = runs.map(run => {
-            // FIX: Use real wall-clock duration from accurate startTime/endTime
             const totalTime = (run.endTime - run.startTime) / 1000;
             const tokensPerSecond = totalTime > 0 ? run.tokenCount / totalTime : 0;
             return {
@@ -587,6 +588,8 @@ export class BenchmarkDataProcessor {
                 response: run.response || '',
                 startTime: run.startTime,
                 endTime: run.endTime,
+                maxTokens: run.maxTokens ?? 0,
+                firstTokenLatencyMs: run.firstTokenLatencyMs ?? 0,
             };
         });
 
@@ -598,27 +601,39 @@ export class BenchmarkDataProcessor {
             benchmarks,
             tokensPerSecond: avgTPS,
             loadTime: avgLoad,
+            score: 0,
         };
+
     }
+    static processCompleteSession(rawSession: RawBenchmarkSession): ProcessedSession {
+        const systemSpecs = this.parseSystemSpecs(rawSession.systemInfo);
 
-    static processCompleteSession(session: RawBenchmarkSession): ProcessedSession {
-        const systemSpecs = this.parseSystemSpecs(session.systemInfo);
-        const fullGPUInfo = this.parseGPUInfo(session.gpuInfo, session.detectedGPUInfo);
-        const benchmarkData = this.parseBenchmarkData(
-            session.gpuInfo,
-            session.systemInfo,
-            session.detectedGPUInfo
-        ) as BenchmarkData & { _gpuType?: string };
-        const benchmarkResults = this.parseBenchmarkResults(session.benchmarkRuns);
-
-        benchmarkData.performanceScore = calculatePerformanceScore(session.benchmarkRuns);
-        benchmarkData.performanceTier = determinePerformanceTier(
-            benchmarkData.performanceScore ?? 0,
-            (benchmarkData as any)._gpuType || 'discrete'
+        const fullGPUInfo = this.parseGPUInfo(
+            rawSession.gpuInfo,
+            rawSession.detectedGPUInfo
         );
 
-        delete (benchmarkData as any)._gpuType;
+        const benchmarkData = this.parseBenchmarkData(
+            rawSession.gpuInfo,
+            rawSession.systemInfo,
+            rawSession.detectedGPUInfo
+        );
 
-        return { systemSpecs, benchmarkData, benchmarkResults, fullGPUInfo };
+        const benchmarkResults = this.parseBenchmarkResults(rawSession.benchmarkRuns);
+
+        const performanceScore = calculatePerformanceScore(rawSession.benchmarkRuns);
+        const gpuType = (benchmarkData as BenchmarkData & { _gpuType: string })._gpuType || 'discrete';
+        const performanceTier = determinePerformanceTier(performanceScore, gpuType);
+
+        benchmarkData.performanceScore = performanceScore;
+        benchmarkData.performanceTier = performanceTier;
+        benchmarkResults.score = performanceScore;
+
+        return {
+            systemSpecs,
+            benchmarkData,
+            benchmarkResults,
+            fullGPUInfo,
+        };
     }
 }

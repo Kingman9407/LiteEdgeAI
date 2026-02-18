@@ -107,7 +107,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
         const totalTime = finalResults.reduce((a, b) => a + b.totalTime, 0);
         const avgTokensPerSec = totalTokens / totalTime;
         const avgFTL =
-            finalResults.reduce((a, b) => a + b.firstTokenLatencyMs, 0) /
+            finalResults.reduce((a, b) => a + (b.firstTokenLatencyMs ?? 0), 0) /
             finalResults.length;
 
         if (onBenchmarkComplete) {
@@ -156,10 +156,10 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                         onClick={() => setMode(m)}
                         disabled={running}
                         className={`px-4 py-2 rounded-lg transition-all text-sm font-medium capitalize ${mode === m
-                                ? m === 'extreme'
-                                    ? 'bg-red-500 text-white'
-                                    : 'bg-[#4fbf8a] text-white'
-                                : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
+                            ? m === 'extreme'
+                                ? 'bg-red-500 text-white'
+                                : 'bg-[#4fbf8a] text-white'
+                            : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
                             }`}
                     >
                         {m}
@@ -191,10 +191,10 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                                 {test.name}
                             </span>
                             <span className={`text-xs px-2 py-0.5 rounded-full ${test.maxTokens >= 2048
-                                    ? 'bg-red-500/20 text-red-400'
-                                    : test.maxTokens >= 1024
-                                        ? 'bg-yellow-500/20 text-yellow-400'
-                                        : 'bg-[#4fbf8a]/20 text-[#4fbf8a]'
+                                ? 'bg-red-500/20 text-red-400'
+                                : test.maxTokens >= 1024
+                                    ? 'bg-yellow-500/20 text-yellow-400'
+                                    : 'bg-[#4fbf8a]/20 text-[#4fbf8a]'
                                 }`}>
                                 {test.maxTokens} tokens
                             </span>
@@ -312,10 +312,10 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                                                 <div className="w-16 h-2 bg-[#34363c] rounded-full overflow-hidden">
                                                     <div
                                                         className={`h-full rounded-full ${utilization > 90
-                                                                ? 'bg-[#4fbf8a]'
-                                                                : utilization > 50
-                                                                    ? 'bg-yellow-400'
-                                                                    : 'bg-red-400'
+                                                            ? 'bg-[#4fbf8a]'
+                                                            : utilization > 50
+                                                                ? 'bg-yellow-400'
+                                                                : 'bg-red-400'
                                                             }`}
                                                         style={{ width: `${Math.min(utilization, 100)}%` }}
                                                     />
