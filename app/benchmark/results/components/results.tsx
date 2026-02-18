@@ -19,6 +19,7 @@ export function SubmitResultsPage({
     // [ADDED] new props passed down from WebLLMBenchmark
     firstTokenLatencyMs,
     totalBenchmarkTime,
+    difficulty,
 }: SubmitResultsPageProps) {
     const [agreed, setAgreed] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,6 +46,7 @@ export function SubmitResultsPage({
                 // [ADDED] forwarded to service
                 firstTokenLatencyMs: firstTokenLatencyMs ?? null,
                 totalBenchmarkTime: totalBenchmarkTime ?? null,
+                difficulty: difficulty ?? null,                      // ✅ use the prop directly
             });
 
             if (result.success) {

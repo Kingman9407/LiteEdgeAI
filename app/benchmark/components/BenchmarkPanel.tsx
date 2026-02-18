@@ -1,3 +1,4 @@
+'use client'
 // BenchmarkPanel.tsx
 import { useMemo, useRef, useState } from 'react';
 import { BENCHMARKS } from '../data/benchmarkTests';
@@ -21,10 +22,13 @@ interface Props {
         score: number;
         benchmarks: BenchmarkResult[];
     }) => void;
+    difficulty: string;
+    onDifficultyChange: (d: string) => void;
 }
 
-export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComplete }: Props) {
-    const [mode, setMode] = useState<BenchmarkMode>('normal');
+export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComplete, difficulty, onDifficultyChange }: Props) {
+    const mode = difficulty as BenchmarkMode;
+
     const [running, setRunning] = useState(false);
     const [results, setResults] = useState<BenchmarkResult[]>([]);
     const [current, setCurrent] = useState(0);
@@ -33,7 +37,6 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
 
     const tests = BENCHMARKS[mode];
 
-    // ✅ Calculate total tokens the suite will attempt
     const totalSuiteTokens = tests.reduce((sum, t) => sum + t.maxTokens, 0);
 
     const runBenchmark = async () => {
@@ -45,7 +48,6 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
 
         const benchmarkStartTime = performance.now();
 
-        // Warmup with the first test
         setPhase('warmup');
         await runPromptBenchmark(tests[0].prompt, tests[0].maxTokens);
 
@@ -67,7 +69,6 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                     `iter ${iter + 1}/${ITERATIONS_PER_TEST}`
                 );
 
-                // ✅ Pass per-test maxTokens
                 const { firstTokenLatencyMs, tokensPerSecond, tokenCount, text } =
                     await runPromptBenchmark(test.prompt, test.maxTokens);
 
@@ -88,7 +89,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                 response: lastText,
                 totalTime: approxTime,
                 tokenCount: avgTokens,
-                maxTokens: test.maxTokens,  // ✅ track what was requested
+                maxTokens: test.maxTokens,
                 wordCount: lastText.trim().split(/\s+/).length,
                 charCount: lastText.length,
                 tokensPerSecond: avgTPS,
@@ -130,7 +131,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
         const totalTime = results.reduce((a, b) => a + b.totalTime, 0);
         const totalTokens = results.reduce((a, b) => a + b.tokenCount, 0);
         const avgFTL =
-            results.reduce((a, b) => a + b.firstTokenLatencyMs, 0) / results.length;
+            results.reduce((a, b) => a + (b.firstTokenLatencyMs ?? 0), 0) / results.length;
 
         const fastest = [...results].sort((a, b) => b.tokensPerSecond - a.tokensPerSecond)[0];
         const slowest = [...results].sort((a, b) => a.tokensPerSecond - b.tokensPerSecond)[0];
@@ -153,7 +154,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                 {(['normal', 'hard', 'extreme'] as BenchmarkMode[]).map((m) => (
                     <button
                         key={m}
-                        onClick={() => setMode(m)}
+                        onClick={() => onDifficultyChange(m)}
                         disabled={running}
                         className={`px-4 py-2 rounded-lg transition-all text-sm font-medium capitalize ${mode === m
                             ? m === 'extreme'
@@ -282,32 +283,19 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                         </thead>
                         <tbody>
                             {results.map((r, i) => {
-                                const utilization = (r.tokenCount / r.maxTokens) * 100;
+                                const utilization = (r.tokenCount / (r.maxTokens ?? 0)) * 100;
                                 return (
                                     <tr
                                         key={i}
                                         className="border-t border-[#34363c] hover:bg-[#232428]/30 transition-colors"
                                     >
-                                        <td className="p-3 font-medium text-[#f2f3f5]">
-                                            {r.name}
-                                        </td>
-                                        <td className="p-3 text-[#b0b4bb]">
-                                            {r.maxTokens}
-                                        </td>
-                                        <td className="p-3 text-[#b0b4bb]">
-                                            {r.tokenCount}
-                                        </td>
-                                        <td className="p-3 text-[#b0b4bb]">
-                                            {r.totalTime.toFixed(2)}
-                                        </td>
-                                        <td className="p-3 text-[#4fbf8a] font-medium">
-                                            {r.tokensPerSecond.toFixed(1)}
-                                        </td>
-                                        <td className="p-3 text-[#b0b4bb]">
-                                            {r.firstTokenLatencyMs.toFixed(0)}
-                                        </td>
+                                        <td className="p-3 font-medium text-[#f2f3f5]">{r.name}</td>
+                                        <td className="p-3 text-[#b0b4bb]">{r.maxTokens}</td>
+                                        <td className="p-3 text-[#b0b4bb]">{r.tokenCount}</td>
+                                        <td className="p-3 text-[#b0b4bb]">{r.totalTime.toFixed(2)}</td>
+                                        <td className="p-3 text-[#4fbf8a] font-medium">{r.tokensPerSecond.toFixed(1)}</td>
+                                        <td className="p-3 text-[#b0b4bb]">{r.firstTokenLatencyMs?.toFixed(0)}</td>
                                         <td className="p-3">
-                                            {/* Color coded utilization bar */}
                                             <div className="flex items-center gap-2">
                                                 <div className="w-16 h-2 bg-[#34363c] rounded-full overflow-hidden">
                                                     <div
@@ -326,9 +314,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                                             </div>
                                         </td>
                                         <td className="p-3 max-w-xs text-[#b0b4bb]">
-                                            <div className="line-clamp-2 text-xs">
-                                                {r.response}
-                                            </div>
+                                            <div className="line-clamp-2 text-xs">{r.response}</div>
                                         </td>
                                     </tr>
                                 );

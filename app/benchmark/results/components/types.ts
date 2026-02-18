@@ -32,6 +32,7 @@ export type SubmitResultsPageProps = {
     systemSpecs?: PCSpecs | null;
     benchmarkResults?: BenchmarkResults;
     fullGPUInfo?: GPUInfo | null;
+    difficulty?: BenchmarkMode;
 };
 
 export type BenchmarkData = {

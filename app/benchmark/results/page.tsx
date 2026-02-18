@@ -32,6 +32,8 @@ export default function ResultsPage() {
             modelName={''}
             firstTokenLatencyMs={null}
             totalBenchmarkTime={null}
+            difficulty="normal"           // ← added
+
         />
 
     </>;

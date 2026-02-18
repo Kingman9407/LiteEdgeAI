@@ -35,6 +35,8 @@ export default function WebLLMBenchmark() {
     const [showGPU, setShowGPU] = useState(false);
     const [showSubmitPage, setShowSubmitPage] = useState(false);
     const [specs, setSpecs] = useState<PCSpecs | null>(null);
+    // ─── moved inside the component & renamed for clarity ───
+    const [currentDifficulty, setCurrentDifficulty] = useState<string>('normal');
 
     const [benchmarkResults, setBenchmarkResults] = useState<{
         tokensPerSecond: number;
@@ -146,6 +148,7 @@ export default function WebLLMBenchmark() {
                 firstTokenLatencyMs={benchmarkResults?.firstTokenLatencyMs ?? null}
                 totalBenchmarkTime={benchmarkResults?.totalBenchmarkTime ?? null}
                 modelName={model}
+                difficulty={currentDifficulty}   // ← fixed reference
             />
         );
     }
@@ -154,7 +157,6 @@ export default function WebLLMBenchmark() {
         <div className="bg-[#0a0b0d] text-white p-6 pt-24">
             <div className="max-w-6xl mx-auto space-y-6">
 
-                {/* Header */}
                 <h1
                     className="text-4xl font-bold text-center tracking-wide text-[#f2f3f5]"
                     style={{
@@ -170,7 +172,6 @@ export default function WebLLMBenchmark() {
                     </span>
                 </div>
 
-                {/* Model Selector Card */}
                 <div className="rounded-xl bg-[#18191c] backdrop-blur p-4 border border-[#34363c] shadow-lg hover:shadow-xl transition-shadow">
                     <ModelSelector
                         selectedModel={model}
@@ -182,7 +183,6 @@ export default function WebLLMBenchmark() {
                     />
                 </div>
 
-                {/* GPU Section */}
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowGPU(true)}
@@ -205,16 +205,17 @@ export default function WebLLMBenchmark() {
                     )}
                 </div>
 
-                {/* Benchmark Panel Card */}
+                {/* ─── pass difficulty state to BenchmarkPanel ─── */}
                 <div className="rounded-xl bg-[#18191c] p-4 border border-[#34363c] shadow-lg hover:shadow-xl transition-shadow">
                     <BenchmarkPanel
                         disabled={!modelLoaded}
                         runPromptBenchmark={generateStreamBenchmark}
                         onBenchmarkComplete={handleBenchmarkComplete}
+                        difficulty={currentDifficulty}
+                        onDifficultyChange={setCurrentDifficulty}
                     />
                 </div>
 
-                {/* Submit Button */}
                 <div className="flex justify-center">
                     <button
                         onClick={handleSubmitResults}
@@ -229,7 +230,6 @@ export default function WebLLMBenchmark() {
                     </button>
                 </div>
 
-                {/* Inline Specs */}
                 {specs && (
                     <div className="rounded-xl bg-[#18191c] p-4 text-sm border border-[#34363c] text-[#b0b4bb]">
                         <div className="flex flex-wrap gap-4">

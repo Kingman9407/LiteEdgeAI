@@ -96,14 +96,13 @@ export interface BenchmarkResult {
     response: string;
     totalTime: number;
     tokenCount: number;
-    maxTokens: number;
     wordCount: number;
     charCount: number;
     tokensPerSecond: number;
-    firstTokenLatencyMs: number;
     startTime: number;
     endTime: number;
-
+    maxTokens?: number;              // <-- make optional
+    firstTokenLatencyMs?: number;
 }
 
 export interface BenchmarkResults {
@@ -112,8 +111,6 @@ export interface BenchmarkResults {
     loadTime: number;
     score: number;
     benchmarks: BenchmarkResult[];
-    maxTokens?: number;              // <-- make optional
-    firstTokenLatencyMs?: number;
 }
 
 export interface BenchmarkData {
@@ -138,6 +135,8 @@ export interface SubmitResultsPageProps {
     modelName: string;
     firstTokenLatencyMs: number | null;
     totalBenchmarkTime: number | null;
+    difficulty: string | null;
+
 }
 
 /* =====================================================
