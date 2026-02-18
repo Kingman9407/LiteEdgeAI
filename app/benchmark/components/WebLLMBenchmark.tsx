@@ -40,9 +40,11 @@ export default function WebLLMBenchmark() {
     const [showSubmitPage, setShowSubmitPage] = useState(false);
     const [specs, setSpecs] = useState<PCSpecs | null>(null);
 
+    // [UPDATED] state shape — loadTime renamed, firstTokenLatencyMs added
     const [benchmarkResults, setBenchmarkResults] = useState<{
         tokensPerSecond: number;
-        loadTime: number;
+        firstTokenLatencyMs: number;
+        totalBenchmarkTime: number;
         score: number;
         benchmarks: BenchmarkResult[];
     } | null>(null);
@@ -50,7 +52,8 @@ export default function WebLLMBenchmark() {
     const [rawBenchmarkRuns, setRawBenchmarkRuns] = useState<RawBenchmarkRun[]>([]);
     const [processedData, setProcessedData] = useState<ProcessedSession | null>(null);
 
-    const { modelLoaded, status, loadModel, unloadModel, generate } = useWebLLM();
+    // [UPDATED] destructure generateStreamBenchmark instead of generate
+    const { modelLoaded, status, loadModel, unloadModel, generateStreamBenchmark } = useWebLLM();
 
     // Always detect GPU — not just when modal opens
     const gpuInfo = useGPUInfo(true);
@@ -64,25 +67,24 @@ export default function WebLLMBenchmark() {
         });
     }, []);
 
+    // [UPDATED] handler now receives firstTokenLatencyMs and totalBenchmarkTime
     const handleBenchmarkComplete = (results: {
         tokensPerSecond: number;
-        loadTime: number;
+        firstTokenLatencyMs: number;
+        totalBenchmarkTime: number;
         score: number;
         benchmarks: BenchmarkResult[];
     }) => {
         setBenchmarkResults(results);
 
-        // FIX: Use real startTime/endTime captured during each benchmark run,
-        // instead of reconstructing them all from a single Date.now() call
-        // which caused all runs to share the same endTime and corrupt TPS scoring.
         const rawRuns: RawBenchmarkRun[] = results.benchmarks.map(bench => ({
             testName: bench.name,
-            startTime: bench.startTime,   // real wall-clock start from BenchmarkPanel
-            endTime: bench.endTime,       // real wall-clock end from BenchmarkPanel
+            startTime: bench.startTime,
+            endTime: bench.endTime,
             tokenCount: bench.tokenCount,
             wordCount: bench.wordCount,
             modelUsed: model,
-            loadTimeMs: results.loadTime * 1000,
+            loadTimeMs: results.totalBenchmarkTime * 1000, // [RENAMED from results.loadTime]
             prompt: bench.prompt,
             response: bench.response,
         }));
@@ -113,7 +115,6 @@ export default function WebLLMBenchmark() {
                 },
             },
             gpuInfo: {
-                // Use unmasked values from hook detection
                 vendor: gpuInfo.unmaskedVendor || gpuInfo.vendor,
                 renderer: gpuInfo.unmaskedRenderer || gpuInfo.renderer,
                 version: gpuInfo.webglVersion || (gpuInfo.webgl2 ? 'WebGL 2' : 'WebGL 1'),
@@ -128,7 +129,6 @@ export default function WebLLMBenchmark() {
             },
             benchmarkRuns: rawBenchmarkRuns,
             timestamp: Date.now(),
-            // Pass the FULL pre-detected GPU info to avoid data loss
             detectedGPUInfo: gpuInfo,
         };
 
@@ -217,9 +217,10 @@ export default function WebLLMBenchmark() {
                 <div className="rounded-xl bg-[#18191c] p-4
                     border border-[#34363c]
                     shadow-lg hover:shadow-xl transition-shadow">
+                    {/* [UPDATED] runPrompt → runPromptBenchmark, passing generateStreamBenchmark */}
                     <BenchmarkPanel
                         disabled={!modelLoaded}
-                        runPrompt={generate}
+                        runPromptBenchmark={generateStreamBenchmark}
                         onBenchmarkComplete={handleBenchmarkComplete}
                     />
                 </div>

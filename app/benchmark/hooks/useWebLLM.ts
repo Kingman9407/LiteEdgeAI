@@ -21,6 +21,9 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
 
 const DEFAULT_CONTEXT_WINDOW = 4096;
 
+// [NEW] Fixed max_tokens used for every benchmark run (fairness across tests)
+export const BENCHMARK_MAX_TOKENS = 256;
+
 export function useWebLLM() {
     const engineRef = useRef<webllm.MLCEngine | null>(null);
     const [modelLoaded, setModelLoaded] = useState(false);
@@ -196,6 +199,62 @@ export function useWebLLM() {
         }
     };
 
+    // -------- [NEW] Streaming benchmark generation --------
+    // - Uses stream: true for accurate per-token timing
+    // - Records firstTokenLatencyMs separately (time from request → first token)
+    // - TPS timer starts AFTER first token (excludes prefill/first-token latency)
+    // - Counts real streamed token chunks, not word*1.3 estimation
+    // - max_tokens fixed via BENCHMARK_MAX_TOKENS for fairness across tests
+    const generateStreamBenchmark = async (
+        prompt: string,
+        maxTokens: number = BENCHMARK_MAX_TOKENS,
+        temperature = 0.7
+    ): Promise<{
+        firstTokenLatencyMs: number;
+        tokensPerSecond: number;
+        tokenCount: number;
+        text: string;
+    }> => {
+        if (!engineRef.current) throw new Error('Model not loaded.');
+
+        let firstTokenLatencyMs = 0;
+        let tokenCount = 0;
+        let text = '';
+        const requestStart = performance.now();
+        let streamStart: number | null = null; // TPS clock starts after first token
+
+        const stream = await engineRef.current.chat.completions.create({
+            messages: [{ role: 'user', content: prompt }],
+            temperature,
+            max_tokens: maxTokens,
+            stream: true,
+        });
+
+        for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content;
+            if (!content) continue;
+
+            if (streamStart === null) {
+                // First token: record latency, start TPS timer
+                firstTokenLatencyMs = performance.now() - requestStart;
+                streamStart = performance.now();
+                // Do NOT count the first token in TPS (it's part of prefill)
+            } else {
+                // Every subsequent token counts toward TPS
+                tokenCount++;
+            }
+            text += content;
+        }
+
+        const streamDurationSec =
+            streamStart !== null ? (performance.now() - streamStart) / 1000 : 0;
+
+        const tokensPerSecond =
+            streamDurationSec > 0 ? tokenCount / streamDurationSec : 0;
+
+        return { firstTokenLatencyMs, tokensPerSecond, tokenCount, text };
+    };
+
     // -------- Unload model --------
     const unloadModel = async () => {
         if (engineRef.current) {
@@ -216,6 +275,7 @@ export function useWebLLM() {
         loadModel,
         generate,
         generateStream,
+        generateStreamBenchmark, // [NEW] export for BenchmarkPanel
         unloadModel,
         recommendModel,
         checkDeviceCapabilities,

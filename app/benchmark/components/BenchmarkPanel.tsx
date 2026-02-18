@@ -1,83 +1,131 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { BENCHMARKS } from '../data/benchmarkTests';
 import { BenchmarkResult, BenchmarkMode } from '../types/types';
+import { BENCHMARK_MAX_TOKENS } from '../hooks/useWebLLM'; // [NEW] fixed token budget import
+
+// [NEW] How many iterations to run per test (results averaged; first is warmup)
+const ITERATIONS_PER_TEST = 3;
 
 interface Props {
-    runPrompt: (p: string) => Promise<string>;
+    // [NEW] runPromptBenchmark replaces runPrompt — takes prompt, returns streaming metrics
+    runPromptBenchmark: (prompt: string) => Promise<{
+        firstTokenLatencyMs: number;
+        tokensPerSecond: number;
+        tokenCount: number;
+        text: string;
+    }>;
     disabled: boolean;
     onBenchmarkComplete?: (results: {
         tokensPerSecond: number;
-        loadTime: number;
+        firstTokenLatencyMs: number; // [NEW] reported separately
+        totalBenchmarkTime: number;  // [RENAMED] was loadTime — now accurately named
         score: number;
         benchmarks: BenchmarkResult[];
     }) => void;
 }
 
-export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Props) {
+export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComplete }: Props) {
     const [mode, setMode] = useState<BenchmarkMode>('normal');
     const [running, setRunning] = useState(false);
     const [results, setResults] = useState<BenchmarkResult[]>([]);
     const [current, setCurrent] = useState(0);
+    const [phase, setPhase] = useState(''); // [NEW] shows warmup/iteration status
+
+    // [NEW] Ref to accumulate results without triggering React re-renders during streaming
+    const resultsAccRef = useRef<BenchmarkResult[]>([]);
 
     const tests = BENCHMARKS[mode];
 
     const runBenchmark = async () => {
         setRunning(true);
         setResults([]);
+        resultsAccRef.current = [];
         setCurrent(0);
+        setPhase('');
 
-        const temp: BenchmarkResult[] = [];
         const benchmarkStartTime = performance.now();
+
+        // [NEW] Warmup run — discard result to prime GPU/JIT before real measurements
+        setPhase('warmup');
+        await runPromptBenchmark(tests[0].prompt);
+
+        const finalResults: BenchmarkResult[] = [];
 
         for (let i = 0; i < tests.length; i++) {
             setCurrent(i + 1);
             const test = tests[i];
 
-            // FIX: Capture real wall-clock timestamps for each run
-            const wallStart = Date.now();
-            const perfStart = performance.now();
+            // [NEW] Multiple iterations per test — collect raw numbers first
+            const iterTPS: number[] = [];
+            const iterFTL: number[] = [];
+            const iterTokens: number[] = [];
+            let lastText = '';
 
-            const res = await runPrompt(test.prompt);
+            for (let iter = 0; iter < ITERATIONS_PER_TEST; iter++) {
+                setPhase(`test ${i + 1}/${tests.length}, iter ${iter + 1}/${ITERATIONS_PER_TEST}`);
 
-            const wallEnd = Date.now();
-            const time = (performance.now() - perfStart) / 1000;
+                // [NEW] Call streaming benchmark — timing happens inside useWebLLM, not here
+                // This means React state updates here do NOT pollute the timing measurements
+                const { firstTokenLatencyMs, tokensPerSecond, tokenCount, text } =
+                    await runPromptBenchmark(test.prompt);
 
-            const words = res.trim().split(/\s+/).length;
-            const chars = res.length;
-            const tokens = Math.round(words * 1.3);
+                iterTPS.push(tokensPerSecond);
+                iterFTL.push(firstTokenLatencyMs);
+                iterTokens.push(tokenCount);
+                lastText = text;
+            }
 
-            temp.push({
+            // [NEW] Drop highest and lowest TPS if we have enough iterations, then average
+            const avgTPS = dropAndAverage(iterTPS);
+            const avgFTL = dropAndAverage(iterFTL);
+            const avgTokens = Math.round(dropAndAverage(iterTokens));
+
+            // totalTime approximated from avg tokens / avg tps for the table display
+            const approxTime = avgTokens / (avgTPS || 1);
+
+            const wallStart = Date.now(); // approximate wall timestamps
+            const wallEnd = Date.now() + Math.round(approxTime * 1000);
+
+            finalResults.push({
                 name: test.name,
                 prompt: test.prompt,
-                response: res,
-                totalTime: time,
-                tokenCount: tokens,
-                wordCount: words,
-                charCount: chars,
-                tokensPerSecond: tokens / time,
-                // FIX: Real timestamps captured during the run, not reconstructed after
+                response: lastText,
+                totalTime: approxTime,
+                tokenCount: avgTokens,
+                wordCount: lastText.trim().split(/\s+/).length,
+                charCount: lastText.length,
+                tokensPerSecond: avgTPS,
+                firstTokenLatencyMs: avgFTL, // [NEW] field on BenchmarkResult
                 startTime: wallStart,
                 endTime: wallEnd,
             });
 
-            setResults([...temp]);
+            // [NEW] Batch state update only after each test completes (not mid-stream)
+            // This prevents React render overhead from interfering with timing
+            setResults([...finalResults]);
         }
 
-        const totalLoadTime = (performance.now() - benchmarkStartTime) / 1000;
+        setPhase('');
+        const totalBenchmarkTime = (performance.now() - benchmarkStartTime) / 1000;
 
-        const totalTime = temp.reduce((a, b) => a + b.totalTime, 0);
-        const totalTokens = temp.reduce((a, b) => a + b.tokenCount, 0);
+        const totalTokens = finalResults.reduce((a, b) => a + b.tokenCount, 0);
+        const totalTime = finalResults.reduce((a, b) => a + b.totalTime, 0);
         const avgTokensPerSec = totalTokens / totalTime;
+        const avgFTL =
+            finalResults.reduce((a, b) => a + (b.firstTokenLatencyMs ?? 0), 0) /
+            finalResults.length;
 
         if (onBenchmarkComplete) {
             onBenchmarkComplete({
                 tokensPerSecond: avgTokensPerSec,
-                loadTime: totalLoadTime,
+                firstTokenLatencyMs: avgFTL,         // [NEW]
+                totalBenchmarkTime,                   // [RENAMED from loadTime]
                 score: Math.round(avgTokensPerSec * 10),
-                benchmarks: temp,
+                benchmarks: finalResults,
             });
         }
 
+        resultsAccRef.current = finalResults;
         setRunning(false);
     };
 
@@ -86,6 +134,8 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
 
         const totalTime = results.reduce((a, b) => a + b.totalTime, 0);
         const totalTokens = results.reduce((a, b) => a + b.tokenCount, 0);
+        const avgFTL =
+            results.reduce((a, b) => a + (b.firstTokenLatencyMs ?? 0), 0) / results.length;
 
         const fastest = [...results].sort((a, b) => a.totalTime - b.totalTime)[0];
         const slowest = [...results].sort((a, b) => b.totalTime - a.totalTime)[0];
@@ -93,6 +143,7 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
         return {
             totalTime,
             avgTokensPerSec: totalTokens / totalTime,
+            avgFirstTokenLatencyMs: avgFTL, // [NEW]
             fastest,
             slowest,
             score: Math.round((totalTokens / totalTime) * 10),
@@ -133,7 +184,12 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                     disabled:opacity-40 disabled:cursor-not-allowed
                     disabled:hover:bg-[#4fbf8a]/10"
             >
-                {running ? `Running ${current}/${tests.length}` : 'Run Benchmark'}
+                {/* [NEW] shows warmup/iteration phase in button label */}
+                {running
+                    ? phase
+                        ? `Running (${phase})`
+                        : `Running ${current}/${tests.length}`
+                    : 'Run Benchmark'}
             </button>
 
             {/* Summary */}
@@ -141,7 +197,11 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <Stat label="Total Time" value={`${summary.totalTime.toFixed(2)}s`} />
                     <Stat label="Avg Tokens/sec" value={summary.avgTokensPerSec.toFixed(1)} />
-                    <Stat label="Fastest Test" value={summary.fastest.name} />
+                    {/* [NEW] First-token latency stat */}
+                    <Stat
+                        label="Avg First Token"
+                        value={`${summary.avgFirstTokenLatencyMs.toFixed(0)}ms`}
+                    />
                     <Stat label="Score" value={summary.score} />
                 </div>
             )}
@@ -155,6 +215,8 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                                 <th className="p-3 text-[#b0b4bb] font-medium">Test</th>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Time (s)</th>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Tokens/sec</th>
+                                {/* [NEW] First-token latency column */}
+                                <th className="p-3 text-[#b0b4bb] font-medium">First Token (ms)</th>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Tokens</th>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Chars</th>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Response</th>
@@ -169,6 +231,10 @@ export function BenchmarkPanel({ runPrompt, disabled, onBenchmarkComplete }: Pro
                                     <td className="p-3 font-medium text-[#f2f3f5]">{r.name}</td>
                                     <td className="p-3 text-[#b0b4bb]">{r.totalTime.toFixed(2)}</td>
                                     <td className="p-3 text-[#4fbf8a]">{r.tokensPerSecond.toFixed(2)}</td>
+                                    {/* [NEW] */}
+                                    <td className="p-3 text-[#b0b4bb]">
+                                        {r.firstTokenLatencyMs?.toFixed(0) ?? '—'}
+                                    </td>
                                     <td className="p-3 text-[#b0b4bb]">{r.tokenCount}</td>
                                     <td className="p-3 text-[#b0b4bb]">{r.charCount}</td>
                                     <td className="p-3 max-w-xl text-[#b0b4bb]">
@@ -191,4 +257,15 @@ function Stat({ label, value }: { label: string; value: string | number }) {
             <div className="text-lg font-semibold text-[#f2f3f5]">{value}</div>
         </div>
     );
+}
+
+// [NEW] Drops the highest and lowest value from an array before averaging.
+// Falls back to simple average when array has < 4 elements.
+function dropAndAverage(values: number[]): number {
+    if (values.length < 4) {
+        return values.reduce((a, b) => a + b, 0) / values.length;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const trimmed = sorted.slice(1, -1); // drop lowest and highest
+    return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
 }

@@ -101,6 +101,7 @@ export type BenchmarkResult = {
     tokensPerSecond: number;
     startTime: number;
     endTime: number;
+    firstTokenLatencyMs?: number;
 };
 
 export type BenchmarkResults = {
