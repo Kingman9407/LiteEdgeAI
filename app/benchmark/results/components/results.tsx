@@ -50,8 +50,9 @@ export function SubmitResultsPage({
             if (result.success) {
                 onSubmit();
             } else {
-                setError('error' in result ? result.error : 'Failed to submit benchmark');
+                setError(result.error ?? 'Failed to submit benchmark');
             }
+
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An unexpected error occurred');
         } finally {
