@@ -569,7 +569,7 @@ export class BenchmarkDataProcessor {
 
     static parseBenchmarkResults(runs: RawBenchmarkRun[]): BenchmarkResults {
         if (runs.length === 0) {
-            return { benchmarks: [], tokensPerSecond: 0, loadTime: 0 };
+            return { benchmarks: [], tokensPerSecond: 0, loadTime: 0, score: 0 };
         }
 
         const benchmarks: BenchmarkResult[] = runs.map(run => {
