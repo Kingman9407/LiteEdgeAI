@@ -1,4 +1,4 @@
-// shared/types.ts — SINGLE SOURCE OF TRUTH FOR ALL TYPES
+// types/types.ts — SINGLE SOURCE OF TRUTH
 
 /* =====================================================
    SYSTEM & PC SPECS
@@ -22,26 +22,22 @@ export type PrecisionFormat = {
 };
 
 export type GPUInfo = {
-    // Identity
     renderer?: string;
     vendor?: string;
     unmaskedRenderer?: string;
     unmaskedVendor?: string;
 
-    // API Support
     webgpu?: boolean;
     webgl?: boolean;
     webgl2?: boolean;
     webglVersion?: string;
     shadingLanguageVersion?: string;
 
-    // Analysis
     predictedVRAM?: string;
     predictedTier?: string;
     performanceScore?: number;
     capabilities?: string[];
 
-    // Technical Limits
     maxTextureSize?: number;
     maxCubeMapSize?: number;
     maxRenderbufferSize?: number;
@@ -58,7 +54,6 @@ export type GPUInfo = {
     maxColorAttachments?: number;
     maxAnisotropy?: number;
 
-    // Shader Precision
     vertexShaderHighFloat?: PrecisionFormat;
     vertexShaderMediumFloat?: PrecisionFormat;
     vertexShaderLowFloat?: PrecisionFormat;
@@ -66,10 +61,8 @@ export type GPUInfo = {
     fragmentShaderMediumFloat?: PrecisionFormat;
     fragmentShaderLowFloat?: PrecisionFormat;
 
-    // Extensions
     extensions?: string[];
 
-    // WebGPU Adapter
     webgpuAdapter?: {
         architecture?: string;
         device?: string;
@@ -77,7 +70,6 @@ export type GPUInfo = {
         backend?: string;
     };
 
-    // Additional
     aliasedPointSizeRange?: [number, number];
     aliasedLineWidthRange?: [number, number];
     subpixelBits?: number;
@@ -88,43 +80,46 @@ export type GPUInfo = {
    BENCHMARK TYPES
    ===================================================== */
 
-export type BenchmarkMode = 'normal' | 'hard';
+export type BenchmarkMode = 'normal' | 'hard' | 'extreme';
 
-export type BenchmarkResult = {
+export interface BenchmarkTest {
+    name: string;
+    description: string;
+    prompt: string;
+    maxTokens: number;
+    category: 'speed' | 'reasoning' | 'creativity' | 'knowledge';
+}
+
+export interface BenchmarkResult {
     name: string;
     prompt: string;
     response: string;
     totalTime: number;
     tokenCount: number;
+    maxTokens: number;
     wordCount: number;
     charCount: number;
     tokensPerSecond: number;
+    firstTokenLatencyMs: number;
     startTime: number;
     endTime: number;
-    firstTokenLatencyMs?: number;
-};
+}
 
-export type BenchmarkResults = {
+export interface BenchmarkResults {
     modelName?: string;
     tokensPerSecond: number;
     loadTime: number;
+    score: number;
     benchmarks: BenchmarkResult[];
-};
+}
 
-export type BenchmarkData = {
+export interface BenchmarkData {
     normalizedGPU?: string;
     performanceScore?: number;
     performanceTier?: string;
     graphicsBackend?: string;
     gpuBrand?: string;
     platformType?: string;
-};
-
-export interface BenchmarkTest {
-    name: string;
-    description: string;
-    prompt: string;
-    category: 'speed' | 'reasoning' | 'creativity' | 'knowledge';
 }
 
 /* =====================================================
@@ -137,8 +132,9 @@ export interface SubmitResultsPageProps {
     benchmarkData: BenchmarkData;
     systemSpecs: PCSpecs;
     benchmarkResults: BenchmarkResults;
-    fullGPUInfo?: GPUInfo | null;
-    modelName: string; // Add this line
+    modelName: string;
+    firstTokenLatencyMs: number | null;
+    totalBenchmarkTime: number | null;
 }
 
 /* =====================================================

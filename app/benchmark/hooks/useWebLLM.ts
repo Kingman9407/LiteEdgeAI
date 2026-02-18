@@ -13,7 +13,6 @@ interface DeviceCapabilities {
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC': 2048,
     'Llama-3.2-1B-Instruct-q4f16_1-MLC': 4096,
-    'Llama-3.2-3B-Instruct-q4f16_1-MLC': 4096,
     'Phi-3-mini-4k-instruct-q4f16_1-MLC': 4096,
     'Qwen2.5-1.5B-Instruct-q4f16_1-MLC': 4096,
     'Mistral-7B-Instruct-v0.2-q4f16_1-MLC': 4096,
@@ -22,7 +21,7 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
 const DEFAULT_CONTEXT_WINDOW = 4096;
 
 // [NEW] Fixed max_tokens used for every benchmark run (fairness across tests)
-export const BENCHMARK_MAX_TOKENS = 256;
+export const BENCHMARK_MAX_TOKENS = 3000;
 
 export function useWebLLM() {
     const engineRef = useRef<webllm.MLCEngine | null>(null);
@@ -199,34 +198,45 @@ export function useWebLLM() {
         }
     };
 
-    // -------- [NEW] Streaming benchmark generation --------
-    // - Uses stream: true for accurate per-token timing
-    // - Records firstTokenLatencyMs separately (time from request → first token)
-    // - TPS timer starts AFTER first token (excludes prefill/first-token latency)
-    // - Counts real streamed token chunks, not word*1.3 estimation
-    // - max_tokens fixed via BENCHMARK_MAX_TOKENS for fairness across tests
     const generateStreamBenchmark = async (
         prompt: string,
-        maxTokens: number = BENCHMARK_MAX_TOKENS,
-        temperature = 0.7
+        maxTokens: number,
+        temperature = 0
     ): Promise<{
         firstTokenLatencyMs: number;
         tokensPerSecond: number;
         tokenCount: number;
+        requestedMaxTokens: number;  // NEW: report what was actually used
         text: string;
     }> => {
         if (!engineRef.current) throw new Error('Model not loaded.');
+
+        // ✅ Clamp to what the model can actually handle
+        const ctx = contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
+        const promptTokens = estimateTokens(prompt);
+        const safeMax = Math.min(
+            maxTokens,
+            ctx - promptTokens - 64  // safety margin
+        );
+
+        if (safeMax < 16) {
+            throw new Error(
+                `Prompt too long for context window. ` +
+                `ctx=${ctx}, prompt≈${promptTokens} tokens, ` +
+                `only ${ctx - promptTokens} left`
+            );
+        }
 
         let firstTokenLatencyMs = 0;
         let tokenCount = 0;
         let text = '';
         const requestStart = performance.now();
-        let streamStart: number | null = null; // TPS clock starts after first token
+        let streamStart: number | null = null;
 
         const stream = await engineRef.current.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
             temperature,
-            max_tokens: maxTokens,
+            max_tokens: safeMax,  // ← clamped value
             stream: true,
         });
 
@@ -235,12 +245,9 @@ export function useWebLLM() {
             if (!content) continue;
 
             if (streamStart === null) {
-                // First token: record latency, start TPS timer
                 firstTokenLatencyMs = performance.now() - requestStart;
                 streamStart = performance.now();
-                // Do NOT count the first token in TPS (it's part of prefill)
             } else {
-                // Every subsequent token counts toward TPS
                 tokenCount++;
             }
             text += content;
@@ -252,7 +259,13 @@ export function useWebLLM() {
         const tokensPerSecond =
             streamDurationSec > 0 ? tokenCount / streamDurationSec : 0;
 
-        return { firstTokenLatencyMs, tokensPerSecond, tokenCount, text };
+        return {
+            firstTokenLatencyMs,
+            tokensPerSecond,
+            tokenCount,
+            requestedMaxTokens: safeMax,
+            text,
+        };
     };
 
     // -------- Unload model --------

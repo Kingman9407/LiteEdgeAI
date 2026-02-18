@@ -29,6 +29,9 @@ interface SubmitBenchmarkParams {
     benchmarkResults: BenchmarkResults;
     fullGPUInfo?: GPUInfo | null;
     sessionId?: string;
+    // [ADDED] top-level timing fields from WebLLMBenchmark state
+    firstTokenLatencyMs?: number | null;
+    totalBenchmarkTime?: number | null;
 }
 
 
@@ -41,7 +44,9 @@ export async function submitBenchmarkToSupabase({
     benchmarkData,
     benchmarkResults,
     fullGPUInfo,
-    sessionId
+    sessionId,
+    firstTokenLatencyMs,   // [ADDED]
+    totalBenchmarkTime,    // [ADDED]
 }: SubmitBenchmarkParams) {
     devLog('Submitting benchmark for model:', modelName);
 
@@ -52,6 +57,19 @@ export async function submitBenchmarkToSupabase({
         const gpuName = benchmarkData.normalizedGPU || 'Unknown GPU';
 
         devLog('Extracted:', { modelFamily, modelSize, gpuName });
+
+        // [UPDATED] benchmarks array now includes startTime, endTime, prompt, response
+        const enrichedBenchmarks = (benchmarkResults.benchmarks || []).map(bench => ({
+            name: bench.name,
+            tokensPerSecond: bench.tokensPerSecond,
+            totalTime: bench.totalTime,
+            tokenCount: bench.tokenCount,
+            wordCount: bench.wordCount,
+            startTime: bench.startTime ?? null,   // [ADDED]
+            endTime: bench.endTime ?? null,   // [ADDED]
+            prompt: bench.prompt ?? null,   // [ADDED]
+            response: bench.response ?? null,   // [ADDED]
+        }));
 
         // Prepare RPC parameters matching your original structure
         const rpcParams = {
@@ -78,8 +96,13 @@ export async function submitBenchmarkToSupabase({
             p_performance_score: benchmarkData.performanceScore,
             p_performance_tier: benchmarkData.performanceTier,
             p_tokens_per_second: benchmarkResults.tokensPerSecond,
-            p_load_time: benchmarkResults.loadTime,
-            p_benchmarks: benchmarkResults.benchmarks || [],
+            // [UPDATED] p_load_time now correctly sourced from totalBenchmarkTime
+            p_load_time: totalBenchmarkTime ?? benchmarkResults.loadTime ?? null,
+            // [ADDED] new RPC params
+            p_first_token_latency_ms: firstTokenLatencyMs ?? null,
+            p_total_benchmark_time: totalBenchmarkTime ?? null,
+            // [UPDATED] enrichedBenchmarks replaces bare benchmarks array
+            p_benchmarks: enrichedBenchmarks,
             p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
             p_session_id: sessionId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
         };
@@ -100,12 +123,10 @@ export async function submitBenchmarkToSupabase({
 
         devLog('Benchmark submitted successfully');
 
-        const result = {
+        return {
             success: true,
             data: data
         };
-
-        return result;
     } catch (error) {
         devError('Submit benchmark error:', error instanceof Error ? error.message : error);
 
@@ -204,7 +225,6 @@ export async function getAllModels() {
             return null;
         }
 
-        // Process data to add counts
         const processedData = data?.map(model => ({
             ...model,
             total_gpu_types: new Set(model.gpu_sessions?.map((s: { gpu_name?: string }) => s.gpu_name)).size || 0,
@@ -217,7 +237,6 @@ export async function getAllModels() {
                         0
                     ) / model.gpu_sessions.length
                     : 0,
-
         }));
 
         devLog('Models fetched:', processedData?.length || 0);
@@ -242,6 +261,8 @@ export async function getGPULeaderboard(limit: number = 50) {
                 performance_score,
                 tokens_per_second,
                 performance_tier,
+                first_token_latency_ms,
+                total_benchmark_time,
                 created_at,
                 models (
                     model_name,
@@ -281,7 +302,11 @@ export async function getRecentBenchmarks(limit: number = 10) {
                 benchmarks (
                     name,
                     tokens_per_second,
-                    total_time
+                    total_time,
+                    start_time,
+                    end_time,
+                    prompt,
+                    response
                 )
             `)
             .order('created_at', { ascending: false })
@@ -304,7 +329,6 @@ export async function getRecentBenchmarks(limit: number = 10) {
  * Search GPUs by name
  */
 export async function searchGPUs(searchTerm: string) {
-    // Sanitize search input to prevent PostgREST filter injection
     const sanitized = searchTerm.replace(/[^a-zA-Z0-9\s\-_.]/g, '').trim();
     if (!sanitized) return [];
 
@@ -360,7 +384,6 @@ export async function getGPUStats(gpuName: string) {
             return null;
         }
 
-        // Calculate aggregated stats
         const stats = {
             gpu_name: gpuName,
             total_tests: data?.length || 0,
@@ -372,6 +395,13 @@ export async function getGPUStats(gpuName: string) {
             min_tokens_per_second: Math.min(...(data?.map(d => d.tokens_per_second || 0) || [Infinity])),
             avg_performance_score: data?.length > 0
                 ? data.reduce((sum, d) => sum + (d.performance_score || 0), 0) / data.length
+                : 0,
+            // [ADDED] latency aggregates
+            avg_first_token_latency_ms: data?.length > 0
+                ? data.reduce((sum, d) => sum + (d.first_token_latency_ms || 0), 0) / data.length
+                : 0,
+            avg_total_benchmark_time: data?.length > 0
+                ? data.reduce((sum, d) => sum + (d.total_benchmark_time || 0), 0) / data.length
                 : 0,
             sessions: data
         };

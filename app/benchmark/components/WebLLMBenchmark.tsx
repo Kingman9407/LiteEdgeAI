@@ -1,4 +1,3 @@
-// components/WebLLMBenchmark.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -11,9 +10,6 @@ import { SubmitResultsPage } from '../results/components/results';
 import type {
     BenchmarkResult,
     PCSpecs,
-    BenchmarkData,
-    BenchmarkResults,
-    GPUInfo
 } from '../../benchmark/types/types';
 import {
     BenchmarkDataProcessor,
@@ -40,7 +36,6 @@ export default function WebLLMBenchmark() {
     const [showSubmitPage, setShowSubmitPage] = useState(false);
     const [specs, setSpecs] = useState<PCSpecs | null>(null);
 
-    // [UPDATED] state shape — loadTime renamed, firstTokenLatencyMs added
     const [benchmarkResults, setBenchmarkResults] = useState<{
         tokensPerSecond: number;
         firstTokenLatencyMs: number;
@@ -52,10 +47,14 @@ export default function WebLLMBenchmark() {
     const [rawBenchmarkRuns, setRawBenchmarkRuns] = useState<RawBenchmarkRun[]>([]);
     const [processedData, setProcessedData] = useState<ProcessedSession | null>(null);
 
-    // [UPDATED] destructure generateStreamBenchmark instead of generate
-    const { modelLoaded, status, loadModel, unloadModel, generateStreamBenchmark } = useWebLLM();
+    const {
+        modelLoaded,
+        status,
+        loadModel,
+        unloadModel,
+        generateStreamBenchmark
+    } = useWebLLM();
 
-    // Always detect GPU — not just when modal opens
     const gpuInfo = useGPUInfo(true);
 
     useEffect(() => {
@@ -67,7 +66,6 @@ export default function WebLLMBenchmark() {
         });
     }, []);
 
-    // [UPDATED] handler now receives firstTokenLatencyMs and totalBenchmarkTime
     const handleBenchmarkComplete = (results: {
         tokensPerSecond: number;
         firstTokenLatencyMs: number;
@@ -84,7 +82,7 @@ export default function WebLLMBenchmark() {
             tokenCount: bench.tokenCount,
             wordCount: bench.wordCount,
             modelUsed: model,
-            loadTimeMs: results.totalBenchmarkTime * 1000, // [RENAMED from results.loadTime]
+            loadTimeMs: results.totalBenchmarkTime * 1000,
             prompt: bench.prompt,
             response: bench.response,
         }));
@@ -93,13 +91,7 @@ export default function WebLLMBenchmark() {
     };
 
     const handleSubmitResults = () => {
-        if (!gpuInfo) {
-            return;
-        }
-
-        if (rawBenchmarkRuns.length === 0) {
-            return;
-        }
+        if (!gpuInfo || rawBenchmarkRuns.length === 0) return;
 
         const rawSession = {
             systemInfo: {
@@ -120,9 +112,10 @@ export default function WebLLMBenchmark() {
                 version: gpuInfo.webglVersion || (gpuInfo.webgl2 ? 'WebGL 2' : 'WebGL 1'),
                 shadingLanguageVersion: gpuInfo.shadingLanguageVersion,
                 maxTextureSize: gpuInfo.maxTextureSize,
-                maxViewportDims: (gpuInfo.maxViewportWidth != null && gpuInfo.maxViewportHeight != null)
-                    ? [gpuInfo.maxViewportWidth, gpuInfo.maxViewportHeight] as [number, number]
-                    : undefined,
+                maxViewportDims:
+                    (gpuInfo.maxViewportWidth != null && gpuInfo.maxViewportHeight != null)
+                        ? [gpuInfo.maxViewportWidth, gpuInfo.maxViewportHeight] as [number, number]
+                        : undefined,
                 maxAnisotropy: gpuInfo.maxAnisotropy,
                 extensions: gpuInfo.extensions,
                 supportedExtensions: gpuInfo.extensions,
@@ -134,15 +127,11 @@ export default function WebLLMBenchmark() {
 
         const processed = BenchmarkDataProcessor.processCompleteSession(rawSession);
         setProcessedData(processed);
-
         setShowSubmitPage(true);
     };
 
     const handleActualSubmit = () => {
-        if (!processedData) {
-            return;
-        }
-        // TODO: fetch('/api/submit-benchmark', { method: 'POST', body: JSON.stringify(processedData) })
+        if (!processedData) return;
         setShowSubmitPage(false);
     };
 
@@ -151,25 +140,27 @@ export default function WebLLMBenchmark() {
     if (showSubmitPage && processedData) {
         return (
             <SubmitResultsPage
+                {...processedData}
                 onSubmit={handleActualSubmit}
                 onSkip={handleSkip}
-                benchmarkData={processedData.benchmarkData}
-                systemSpecs={processedData.systemSpecs}
-                benchmarkResults={processedData.benchmarkResults}
-                fullGPUInfo={processedData.fullGPUInfo}
+                firstTokenLatencyMs={benchmarkResults?.firstTokenLatencyMs ?? null}
+                totalBenchmarkTime={benchmarkResults?.totalBenchmarkTime ?? null}
                 modelName={model}
             />
         );
     }
 
     return (
-        <div className=" bg-[#0a0b0d] text-white p-6 pt-24">
+        <div className="bg-[#0a0b0d] text-white p-6 pt-24">
             <div className="max-w-6xl mx-auto space-y-6">
 
-                <h1 className="text-4xl font-bold text-center tracking-wide text-[#f2f3f5]"
+                {/* Header */}
+                <h1
+                    className="text-4xl font-bold text-center tracking-wide text-[#f2f3f5]"
                     style={{
                         textShadow: `0 0 20px ${BRAND_GREEN}40, 0 0 40px ${BRAND_GREEN}20`
-                    }}>
+                    }}
+                >
                     WebLLM Benchmark
                 </h1>
 
@@ -179,9 +170,8 @@ export default function WebLLMBenchmark() {
                     </span>
                 </div>
 
-                <div className="rounded-xl bg-[#18191c] backdrop-blur p-4
-                    border border-[#34363c]
-                    shadow-lg hover:shadow-xl transition-shadow">
+                {/* Model Selector Card */}
+                <div className="rounded-xl bg-[#18191c] backdrop-blur p-4 border border-[#34363c] shadow-lg hover:shadow-xl transition-shadow">
                     <ModelSelector
                         selectedModel={model}
                         setSelectedModel={setModel}
@@ -192,6 +182,7 @@ export default function WebLLMBenchmark() {
                     />
                 </div>
 
+                {/* GPU Section */}
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowGPU(true)}
@@ -202,22 +193,20 @@ export default function WebLLMBenchmark() {
                     >
                         GPU Specs
                     </button>
-                    {gpuInfo && (
+
+                    {gpuInfo ? (
                         <span className="text-xs text-[#b0b4bb]">
-                            ✓ {gpuInfo.unmaskedRenderer || gpuInfo.renderer || 'Detecting...'}
+                            ✓ {gpuInfo.unmaskedRenderer || gpuInfo.renderer}
                         </span>
-                    )}
-                    {!gpuInfo && (
+                    ) : (
                         <span className="text-xs text-[#4fbf8a] animate-pulse">
                             Detecting GPU...
                         </span>
                     )}
                 </div>
 
-                <div className="rounded-xl bg-[#18191c] p-4
-                    border border-[#34363c]
-                    shadow-lg hover:shadow-xl transition-shadow">
-                    {/* [UPDATED] runPrompt → runPromptBenchmark, passing generateStreamBenchmark */}
+                {/* Benchmark Panel Card */}
+                <div className="rounded-xl bg-[#18191c] p-4 border border-[#34363c] shadow-lg hover:shadow-xl transition-shadow">
                     <BenchmarkPanel
                         disabled={!modelLoaded}
                         runPromptBenchmark={generateStreamBenchmark}
@@ -225,6 +214,7 @@ export default function WebLLMBenchmark() {
                     />
                 </div>
 
+                {/* Submit Button */}
                 <div className="flex justify-center">
                     <button
                         onClick={handleSubmitResults}
@@ -233,16 +223,15 @@ export default function WebLLMBenchmark() {
                             border-[#4fbf8a] bg-[#4fbf8a]/10 text-[#f2f3f5]
                             hover:bg-[#4fbf8a]/20 hover:shadow-lg
                             hover:shadow-[#4fbf8a]/20
-                            disabled:opacity-40 disabled:cursor-not-allowed
-                            disabled:hover:bg-[#4fbf8a]/10 disabled:hover:shadow-none"
+                            disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                         Submit Results
                     </button>
                 </div>
 
+                {/* Inline Specs */}
                 {specs && (
-                    <div className="rounded-xl bg-[#18191c] p-4 text-sm
-                        border border-[#34363c] text-[#b0b4bb]">
+                    <div className="rounded-xl bg-[#18191c] p-4 text-sm border border-[#34363c] text-[#b0b4bb]">
                         <div className="flex flex-wrap gap-4">
                             <span>CPU: {specs.cpuCores} cores</span>
                             <span>RAM: {specs.deviceMemory ? `${specs.deviceMemory} GB` : 'N/A'}</span>

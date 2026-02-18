@@ -1,24 +1,23 @@
+// BenchmarkPanel.tsx
 import { useMemo, useRef, useState } from 'react';
 import { BENCHMARKS } from '../data/benchmarkTests';
 import { BenchmarkResult, BenchmarkMode } from '../types/types';
-import { BENCHMARK_MAX_TOKENS } from '../hooks/useWebLLM'; // [NEW] fixed token budget import
 
-// [NEW] How many iterations to run per test (results averaged; first is warmup)
 const ITERATIONS_PER_TEST = 3;
 
 interface Props {
-    // [NEW] runPromptBenchmark replaces runPrompt — takes prompt, returns streaming metrics
-    runPromptBenchmark: (prompt: string) => Promise<{
+    runPromptBenchmark: (prompt: string, maxTokens: number) => Promise<{
         firstTokenLatencyMs: number;
         tokensPerSecond: number;
         tokenCount: number;
+        requestedMaxTokens: number;
         text: string;
     }>;
     disabled: boolean;
     onBenchmarkComplete?: (results: {
         tokensPerSecond: number;
-        firstTokenLatencyMs: number; // [NEW] reported separately
-        totalBenchmarkTime: number;  // [RENAMED] was loadTime — now accurately named
+        firstTokenLatencyMs: number;
+        totalBenchmarkTime: number;
         score: number;
         benchmarks: BenchmarkResult[];
     }) => void;
@@ -29,12 +28,13 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
     const [running, setRunning] = useState(false);
     const [results, setResults] = useState<BenchmarkResult[]>([]);
     const [current, setCurrent] = useState(0);
-    const [phase, setPhase] = useState(''); // [NEW] shows warmup/iteration status
-
-    // [NEW] Ref to accumulate results without triggering React re-renders during streaming
+    const [phase, setPhase] = useState('');
     const resultsAccRef = useRef<BenchmarkResult[]>([]);
 
     const tests = BENCHMARKS[mode];
+
+    // ✅ Calculate total tokens the suite will attempt
+    const totalSuiteTokens = tests.reduce((sum, t) => sum + t.maxTokens, 0);
 
     const runBenchmark = async () => {
         setRunning(true);
@@ -45,9 +45,9 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
 
         const benchmarkStartTime = performance.now();
 
-        // [NEW] Warmup run — discard result to prime GPU/JIT before real measurements
+        // Warmup with the first test
         setPhase('warmup');
-        await runPromptBenchmark(tests[0].prompt);
+        await runPromptBenchmark(tests[0].prompt, tests[0].maxTokens);
 
         const finalResults: BenchmarkResult[] = [];
 
@@ -55,19 +55,21 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
             setCurrent(i + 1);
             const test = tests[i];
 
-            // [NEW] Multiple iterations per test — collect raw numbers first
             const iterTPS: number[] = [];
             const iterFTL: number[] = [];
             const iterTokens: number[] = [];
             let lastText = '';
 
             for (let iter = 0; iter < ITERATIONS_PER_TEST; iter++) {
-                setPhase(`test ${i + 1}/${tests.length}, iter ${iter + 1}/${ITERATIONS_PER_TEST}`);
+                setPhase(
+                    `test ${i + 1}/${tests.length} "${test.name}" ` +
+                    `(${test.maxTokens} max tokens) ` +
+                    `iter ${iter + 1}/${ITERATIONS_PER_TEST}`
+                );
 
-                // [NEW] Call streaming benchmark — timing happens inside useWebLLM, not here
-                // This means React state updates here do NOT pollute the timing measurements
+                // ✅ Pass per-test maxTokens
                 const { firstTokenLatencyMs, tokensPerSecond, tokenCount, text } =
-                    await runPromptBenchmark(test.prompt);
+                    await runPromptBenchmark(test.prompt, test.maxTokens);
 
                 iterTPS.push(tokensPerSecond);
                 iterFTL.push(firstTokenLatencyMs);
@@ -75,16 +77,10 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                 lastText = text;
             }
 
-            // [NEW] Drop highest and lowest TPS if we have enough iterations, then average
             const avgTPS = dropAndAverage(iterTPS);
             const avgFTL = dropAndAverage(iterFTL);
             const avgTokens = Math.round(dropAndAverage(iterTokens));
-
-            // totalTime approximated from avg tokens / avg tps for the table display
             const approxTime = avgTokens / (avgTPS || 1);
-
-            const wallStart = Date.now(); // approximate wall timestamps
-            const wallEnd = Date.now() + Math.round(approxTime * 1000);
 
             finalResults.push({
                 name: test.name,
@@ -92,16 +88,15 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                 response: lastText,
                 totalTime: approxTime,
                 tokenCount: avgTokens,
+                maxTokens: test.maxTokens,  // ✅ track what was requested
                 wordCount: lastText.trim().split(/\s+/).length,
                 charCount: lastText.length,
                 tokensPerSecond: avgTPS,
-                firstTokenLatencyMs: avgFTL, // [NEW] field on BenchmarkResult
-                startTime: wallStart,
-                endTime: wallEnd,
+                firstTokenLatencyMs: avgFTL,
+                startTime: Date.now(),
+                endTime: Date.now() + Math.round(approxTime * 1000),
             });
 
-            // [NEW] Batch state update only after each test completes (not mid-stream)
-            // This prevents React render overhead from interfering with timing
             setResults([...finalResults]);
         }
 
@@ -112,14 +107,14 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
         const totalTime = finalResults.reduce((a, b) => a + b.totalTime, 0);
         const avgTokensPerSec = totalTokens / totalTime;
         const avgFTL =
-            finalResults.reduce((a, b) => a + (b.firstTokenLatencyMs ?? 0), 0) /
+            finalResults.reduce((a, b) => a + b.firstTokenLatencyMs, 0) /
             finalResults.length;
 
         if (onBenchmarkComplete) {
             onBenchmarkComplete({
                 tokensPerSecond: avgTokensPerSec,
-                firstTokenLatencyMs: avgFTL,         // [NEW]
-                totalBenchmarkTime,                   // [RENAMED from loadTime]
+                firstTokenLatencyMs: avgFTL,
+                totalBenchmarkTime,
                 score: Math.round(avgTokensPerSec * 10),
                 benchmarks: finalResults,
             });
@@ -135,15 +130,16 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
         const totalTime = results.reduce((a, b) => a + b.totalTime, 0);
         const totalTokens = results.reduce((a, b) => a + b.tokenCount, 0);
         const avgFTL =
-            results.reduce((a, b) => a + (b.firstTokenLatencyMs ?? 0), 0) / results.length;
+            results.reduce((a, b) => a + b.firstTokenLatencyMs, 0) / results.length;
 
-        const fastest = [...results].sort((a, b) => a.totalTime - b.totalTime)[0];
-        const slowest = [...results].sort((a, b) => b.totalTime - a.totalTime)[0];
+        const fastest = [...results].sort((a, b) => b.tokensPerSecond - a.tokensPerSecond)[0];
+        const slowest = [...results].sort((a, b) => a.tokensPerSecond - b.tokensPerSecond)[0];
 
         return {
             totalTime,
+            totalTokens,
             avgTokensPerSec: totalTokens / totalTime,
-            avgFirstTokenLatencyMs: avgFTL, // [NEW]
+            avgFirstTokenLatencyMs: avgFTL,
             fastest,
             slowest,
             score: Math.round((totalTokens / totalTime) * 10),
@@ -153,56 +149,118 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
     return (
         <div className="space-y-4">
             {/* Mode Selector */}
-            <div className="flex gap-2">
-                <button
-                    onClick={() => setMode('normal')}
-                    className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${mode === 'normal'
-                        ? 'bg-[#4fbf8a] text-white'
-                        : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
-                        }`}
-                >
-                    Normal
-                </button>
-                <button
-                    onClick={() => setMode('hard')}
-                    className={`px-4 py-2 rounded-lg transition-all text-sm font-medium ${mode === 'hard'
-                        ? 'bg-[#4fbf8a] text-white'
-                        : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
-                        }`}
-                >
-                    Hard
-                </button>
+            <div className="flex gap-2 flex-wrap">
+                {(['normal', 'hard', 'extreme'] as BenchmarkMode[]).map((m) => (
+                    <button
+                        key={m}
+                        onClick={() => setMode(m)}
+                        disabled={running}
+                        className={`px-4 py-2 rounded-lg transition-all text-sm font-medium capitalize ${mode === m
+                                ? m === 'extreme'
+                                    ? 'bg-red-500 text-white'
+                                    : 'bg-[#4fbf8a] text-white'
+                                : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
+                            }`}
+                    >
+                        {m}
+                    </button>
+                ))}
+            </div>
+
+            {/* Suite Info */}
+            <div className="text-xs text-[#b0b4bb] flex gap-4">
+                <span>{tests.length} tests</span>
+                <span>Up to {totalSuiteTokens.toLocaleString()} total tokens</span>
+                <span>{ITERATIONS_PER_TEST} iterations each</span>
+                {mode === 'extreme' && (
+                    <span className="text-red-400 font-medium">
+                        ⚠️ May crash on low-memory devices
+                    </span>
+                )}
+            </div>
+
+            {/* Test Preview */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {tests.map((test, i) => (
+                    <div
+                        key={i}
+                        className="rounded-lg bg-[#232428] border border-[#34363c] p-3"
+                    >
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-sm font-medium text-[#f2f3f5]">
+                                {test.name}
+                            </span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${test.maxTokens >= 2048
+                                    ? 'bg-red-500/20 text-red-400'
+                                    : test.maxTokens >= 1024
+                                        ? 'bg-yellow-500/20 text-yellow-400'
+                                        : 'bg-[#4fbf8a]/20 text-[#4fbf8a]'
+                                }`}>
+                                {test.maxTokens} tokens
+                            </span>
+                        </div>
+                        <div className="text-xs text-[#b0b4bb]">{test.description}</div>
+                    </div>
+                ))}
             </div>
 
             {/* Run Button */}
             <button
                 onClick={runBenchmark}
                 disabled={disabled || running}
-                className="w-full bg-[#4fbf8a]/10 hover:bg-[#4fbf8a]/20 
-                    border border-[#4fbf8a] text-[#f2f3f5]
-                    py-3 rounded-lg font-medium transition-all
+                className={`w-full py-3 rounded-lg font-medium transition-all
                     disabled:opacity-40 disabled:cursor-not-allowed
-                    disabled:hover:bg-[#4fbf8a]/10"
+                    ${mode === 'extreme'
+                        ? 'bg-red-500/10 hover:bg-red-500/20 border border-red-500 text-[#f2f3f5] disabled:hover:bg-red-500/10'
+                        : 'bg-[#4fbf8a]/10 hover:bg-[#4fbf8a]/20 border border-[#4fbf8a] text-[#f2f3f5] disabled:hover:bg-[#4fbf8a]/10'
+                    }`}
             >
-                {/* [NEW] shows warmup/iteration phase in button label */}
                 {running
                     ? phase
                         ? `Running (${phase})`
                         : `Running ${current}/${tests.length}`
-                    : 'Run Benchmark'}
+                    : mode === 'extreme'
+                        ? '🔥 Run Extreme Benchmark'
+                        : 'Run Benchmark'}
             </button>
 
             {/* Summary */}
             {summary && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <Stat label="Total Time" value={`${summary.totalTime.toFixed(2)}s`} />
+                    <Stat label="Total Tokens" value={summary.totalTokens.toLocaleString()} />
                     <Stat label="Avg Tokens/sec" value={summary.avgTokensPerSec.toFixed(1)} />
-                    {/* [NEW] First-token latency stat */}
                     <Stat
                         label="Avg First Token"
                         value={`${summary.avgFirstTokenLatencyMs.toFixed(0)}ms`}
                     />
                     <Stat label="Score" value={summary.score} />
+                </div>
+            )}
+
+            {/* Fastest / Slowest */}
+            {summary && (
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-[#232428] border border-[#34363c] p-3">
+                        <div className="text-xs text-[#4fbf8a]">🏆 Fastest</div>
+                        <div className="text-sm font-medium text-[#f2f3f5]">
+                            {summary.fastest.name}
+                        </div>
+                        <div className="text-xs text-[#b0b4bb]">
+                            {summary.fastest.tokensPerSecond.toFixed(1)} tok/s
+                            ({summary.fastest.maxTokens} max)
+                        </div>
+                    </div>
+                    <div className="rounded-lg bg-[#232428] border border-[#34363c] p-3">
+                        <div className="text-xs text-red-400">🐢 Slowest</div>
+                        <div className="text-sm font-medium text-[#f2f3f5]">
+                            {summary.slowest.name}
+                        </div>
+                        <div className="text-xs text-[#b0b4bb]">
+                            {summary.slowest.tokensPerSecond.toFixed(1)} tok/s
+                            ({summary.slowest.maxTokens} max)
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -213,35 +271,68 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                         <thead className="bg-[#232428] text-left">
                             <tr>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Test</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Max</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Generated</th>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Time (s)</th>
-                                <th className="p-3 text-[#b0b4bb] font-medium">Tokens/sec</th>
-                                {/* [NEW] First-token latency column */}
-                                <th className="p-3 text-[#b0b4bb] font-medium">First Token (ms)</th>
-                                <th className="p-3 text-[#b0b4bb] font-medium">Tokens</th>
-                                <th className="p-3 text-[#b0b4bb] font-medium">Chars</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Tok/s</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">FTL (ms)</th>
+                                <th className="p-3 text-[#b0b4bb] font-medium">Utilization</th>
                                 <th className="p-3 text-[#b0b4bb] font-medium">Response</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {results.map((r, i) => (
-                                <tr
-                                    key={i}
-                                    className="border-t border-[#34363c] hover:bg-[#232428]/30 transition-colors"
-                                >
-                                    <td className="p-3 font-medium text-[#f2f3f5]">{r.name}</td>
-                                    <td className="p-3 text-[#b0b4bb]">{r.totalTime.toFixed(2)}</td>
-                                    <td className="p-3 text-[#4fbf8a]">{r.tokensPerSecond.toFixed(2)}</td>
-                                    {/* [NEW] */}
-                                    <td className="p-3 text-[#b0b4bb]">
-                                        {r.firstTokenLatencyMs?.toFixed(0) ?? '—'}
-                                    </td>
-                                    <td className="p-3 text-[#b0b4bb]">{r.tokenCount}</td>
-                                    <td className="p-3 text-[#b0b4bb]">{r.charCount}</td>
-                                    <td className="p-3 max-w-xl text-[#b0b4bb]">
-                                        <div className="line-clamp-3">{r.response}</div>
-                                    </td>
-                                </tr>
-                            ))}
+                            {results.map((r, i) => {
+                                const utilization = (r.tokenCount / r.maxTokens) * 100;
+                                return (
+                                    <tr
+                                        key={i}
+                                        className="border-t border-[#34363c] hover:bg-[#232428]/30 transition-colors"
+                                    >
+                                        <td className="p-3 font-medium text-[#f2f3f5]">
+                                            {r.name}
+                                        </td>
+                                        <td className="p-3 text-[#b0b4bb]">
+                                            {r.maxTokens}
+                                        </td>
+                                        <td className="p-3 text-[#b0b4bb]">
+                                            {r.tokenCount}
+                                        </td>
+                                        <td className="p-3 text-[#b0b4bb]">
+                                            {r.totalTime.toFixed(2)}
+                                        </td>
+                                        <td className="p-3 text-[#4fbf8a] font-medium">
+                                            {r.tokensPerSecond.toFixed(1)}
+                                        </td>
+                                        <td className="p-3 text-[#b0b4bb]">
+                                            {r.firstTokenLatencyMs.toFixed(0)}
+                                        </td>
+                                        <td className="p-3">
+                                            {/* Color coded utilization bar */}
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-16 h-2 bg-[#34363c] rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${utilization > 90
+                                                                ? 'bg-[#4fbf8a]'
+                                                                : utilization > 50
+                                                                    ? 'bg-yellow-400'
+                                                                    : 'bg-red-400'
+                                                            }`}
+                                                        style={{ width: `${Math.min(utilization, 100)}%` }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs text-[#b0b4bb]">
+                                                    {utilization.toFixed(0)}%
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="p-3 max-w-xs text-[#b0b4bb]">
+                                            <div className="line-clamp-2 text-xs">
+                                                {r.response}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -259,13 +350,11 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     );
 }
 
-// [NEW] Drops the highest and lowest value from an array before averaging.
-// Falls back to simple average when array has < 4 elements.
 function dropAndAverage(values: number[]): number {
     if (values.length < 4) {
         return values.reduce((a, b) => a + b, 0) / values.length;
     }
     const sorted = [...values].sort((a, b) => a - b);
-    const trimmed = sorted.slice(1, -1); // drop lowest and highest
+    const trimmed = sorted.slice(1, -1);
     return trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
 }

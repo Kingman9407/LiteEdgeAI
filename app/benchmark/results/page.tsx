@@ -26,8 +26,13 @@ export default function ResultsPage() {
             modelName: undefined,
             tokensPerSecond: 0,
             loadTime: 0,
+            score: 0,
             benchmarks: []
-        }} modelName={''} />
+        }}
+            modelName={''}
+            firstTokenLatencyMs={null}
+            totalBenchmarkTime={null}
+        />
 
     </>;
 }

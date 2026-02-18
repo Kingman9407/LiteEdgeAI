@@ -16,6 +16,9 @@ export function SubmitResultsPage({
     systemSpecs,
     benchmarkResults,
     modelName,
+    // [ADDED] new props passed down from WebLLMBenchmark
+    firstTokenLatencyMs,
+    totalBenchmarkTime,
 }: SubmitResultsPageProps) {
     const [agreed, setAgreed] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,6 +42,9 @@ export function SubmitResultsPage({
                 benchmarkData,
                 benchmarkResults,
                 sessionId,
+                // [ADDED] forwarded to service
+                firstTokenLatencyMs: firstTokenLatencyMs ?? null,
+                totalBenchmarkTime: totalBenchmarkTime ?? null,
             });
 
             if (result.success) {
@@ -59,10 +65,7 @@ export function SubmitResultsPage({
 
                 {/* ================= Header ================= */}
                 <div className="text-center space-y-3">
-                    <h1
-                        className="text-4xl font-bold tracking-wide text-[#f2f3f5]"
-
-                    >
+                    <h1 className="text-4xl font-bold tracking-wide text-[#f2f3f5]">
                         Submit Your Results
                     </h1>
                     <p className="text-[#9ca0a8] text-lg">

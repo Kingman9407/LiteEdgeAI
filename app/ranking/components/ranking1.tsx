@@ -10,8 +10,10 @@ type GPURanking = {
     normalized_gpu_name: string;
     performance_score: number;
     tokens_per_second: number;
-    avg_benchmark_tps: number;
-    load_time: number;
+    avg_benchmark_tps: number;           // [FIXED] now averaged from benchmarks rows
+    first_token_latency_ms: number | null; // [ADDED]
+    total_benchmark_time: number | null;   // [ADDED]
+    // load_time                           // [REMOVED]
 };
 
 export default function RankingsPage() {
@@ -26,7 +28,10 @@ export default function RankingsPage() {
             setLoading(true);
             const { data, error } = await supabase
                 .from("gpu_leaderboard_live")
-                .select("model_name, gpu_name, gpu_brand, normalized_gpu_name, performance_score, tokens_per_second, avg_benchmark_tps, load_time")
+                .select(
+                    // [UPDATED] removed load_time, added first_token_latency_ms + total_benchmark_time
+                    "model_name, gpu_name, gpu_brand, normalized_gpu_name, performance_score, tokens_per_second, avg_benchmark_tps, first_token_latency_ms, total_benchmark_time"
+                )
                 .order("tokens_per_second", { ascending: false });
 
             if (!error) setData(data || []);
@@ -56,13 +61,28 @@ export default function RankingsPage() {
             .sort((a, b) => b.tokens_per_second - a.tokens_per_second);
     }, [data, search, modelFilter, brandFilter]);
 
+    // [FIXED] avg benchmark stat card uses avg_benchmark_tps (from individual test rows)
+    const overallAvgBenchmark = useMemo(() => {
+        const valid = filteredData.filter(i => i.avg_benchmark_tps != null);
+        if (valid.length === 0) return 0;
+        return valid.reduce((sum, i) => sum + i.avg_benchmark_tps, 0) / valid.length;
+    }, [filteredData]);
+
+    const avgFirstToken = useMemo(() => {
+        const valid = filteredData.filter(i => i.first_token_latency_ms != null);
+        if (valid.length === 0) return null;
+        return valid.reduce((sum, i) => sum + (i.first_token_latency_ms ?? 0), 0) / valid.length;
+    }, [filteredData]);
+
+
     return (
         <main className="relative min-h-screen bg-[#18191c] text-[#b0b4bb] overflow-hidden pt-24">
             {/* Green edge glow */}
-            <div className="pointer-events-none absolute inset-0 
+            <div className="pointer-events-none absolute inset-0
                 bg-[radial-gradient(ellipse_at_center,rgba(79,191,138,0.15)_0%,rgba(0,0,0,0)_45%)]" />
 
             <div className="relative z-10 max-w-7xl mx-auto px-6 py-16">
+
                 {/* Header */}
                 <div className="text-center mb-12">
                     <h1 className="text-4xl font-extrabold text-[#f2f3f5]">
@@ -79,46 +99,22 @@ export default function RankingsPage() {
                         placeholder="Search GPU or model..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="
-                            px-4 py-3 rounded-md
-                            bg-[#232428]
-                            border border-[#34363c]
-                            text-[#f2f3f5]
-                            placeholder-[#9ca0a8]
-                            focus:outline-none
-                            focus:border-[#4fbf8a]
-                        "
+                        className="px-4 py-3 rounded-md bg-[#232428] border border-[#34363c] text-[#f2f3f5] placeholder-[#9ca0a8] focus:outline-none focus:border-[#4fbf8a]"
                     />
-
                     <select
                         value={modelFilter}
                         onChange={e => setModelFilter(e.target.value)}
-                        className="
-                            px-4 py-3 rounded-md
-                            bg-[#232428]
-                            border border-[#34363c]
-                            text-[#f2f3f5]
-                            focus:outline-none
-                            focus:border-[#4fbf8a]
-                        "
+                        className="px-4 py-3 rounded-md bg-[#232428] border border-[#34363c] text-[#f2f3f5] focus:outline-none focus:border-[#4fbf8a]"
                     >
                         <option value="all">All Models</option>
                         {uniqueModels.map(m => (
                             <option key={m} value={m}>{m}</option>
                         ))}
                     </select>
-
                     <select
                         value={brandFilter}
                         onChange={e => setBrandFilter(e.target.value)}
-                        className="
-                            px-4 py-3 rounded-md
-                            bg-[#232428]
-                            border border-[#34363c]
-                            text-[#f2f3f5]
-                            focus:outline-none
-                            focus:border-[#4fbf8a]
-                        "
+                        className="px-4 py-3 rounded-md bg-[#232428] border border-[#34363c] text-[#f2f3f5] focus:outline-none focus:border-[#4fbf8a]"
                     >
                         <option value="all">All Brands</option>
                         {uniqueBrands.map(b => (
@@ -129,9 +125,9 @@ export default function RankingsPage() {
 
                 {/* Stats Cards */}
                 {!loading && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-4">
-                            <div className="text-[#9ca0a8] text-sm">Total GPUs</div>
+                            <div className="text-[#9ca0a8] text-sm">Total Entries</div>
                             <div className="text-2xl font-bold text-[#f2f3f5] mt-1">
                                 {filteredData.length}
                             </div>
@@ -148,12 +144,22 @@ export default function RankingsPage() {
                                 {filteredData[0]?.tokens_per_second.toFixed(1) || 0} t/s
                             </div>
                         </div>
+                        {/* [UPDATED] Avg Benchmark — now correctly uses avg_benchmark_tps */}
                         <div className="bg-[#232428] border border-[#34363c] rounded-lg p-4">
                             <div className="text-[#9ca0a8] text-sm">Avg Benchmark</div>
                             <div className="text-2xl font-bold text-[#f2f3f5] mt-1">
-                                {(filteredData.reduce((sum, item) => sum + (item.avg_benchmark_tps || 0), 0) / filteredData.length || 0).toFixed(1)} t/s
+                                {overallAvgBenchmark.toFixed(1)} t/s
                             </div>
                         </div>
+                        {/* [ADDED] Avg First Token stat card */}
+                        {avgFirstToken != null && (
+                            <div className="bg-[#232428] border border-[#34363c] rounded-lg p-4">
+                                <div className="text-[#9ca0a8] text-sm">Avg First Token</div>
+                                <div className="text-2xl font-bold text-[#f2f3f5] mt-1">
+                                    {avgFirstToken.toFixed(0)}ms
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -176,8 +182,12 @@ export default function RankingsPage() {
                                     <th className="p-4 text-left">Brand</th>
                                     <th className="p-4 text-left">Model</th>
                                     <th className="p-4 text-left">Speed (t/s)</th>
-                                    <th className="p-4 text-left">Avg Benchmark</th>
-                                    <th className="p-4 text-left">Load Time</th>
+                                    {/* [UPDATED] Avg Benchmark header clarified */}
+                                    <th className="p-4 text-left">Avg Test (t/s)</th>
+                                    {/* [ADDED] */}
+                                    <th className="p-4 text-left">First Token</th>
+                                    <th className="p-4 text-left">Run Time</th>
+                                    {/* [REMOVED] Load Time */}
                                 </tr>
                             </thead>
 
@@ -202,11 +212,23 @@ export default function RankingsPage() {
                                         <td className="p-4 font-bold text-[#4fbf8a]">
                                             {item.tokens_per_second.toFixed(2)}
                                         </td>
+                                        {/* [FIXED] avg_benchmark_tps now reflects true per-test average */}
                                         <td className="p-4">
-                                            {item.avg_benchmark_tps?.toFixed(2) || "N/A"}
+                                            {item.avg_benchmark_tps != null
+                                                ? item.avg_benchmark_tps.toFixed(2)
+                                                : "N/A"}
                                         </td>
+                                        {/* [ADDED] first_token_latency_ms */}
                                         <td className="p-4">
-                                            {item.load_time?.toFixed(2)}s
+                                            {item.first_token_latency_ms != null
+                                                ? `${item.first_token_latency_ms.toFixed(0)}ms`
+                                                : "N/A"}
+                                        </td>
+                                        {/* [ADDED] total_benchmark_time, [REMOVED] load_time */}
+                                        <td className="p-4">
+                                            {item.total_benchmark_time != null
+                                                ? `${item.total_benchmark_time.toFixed(2)}s`
+                                                : "N/A"}
                                         </td>
                                     </tr>
                                 ))}
