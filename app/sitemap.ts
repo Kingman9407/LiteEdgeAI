@@ -11,7 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
-      url: 'https://liteedgeai.com/rankings',
+      url: 'https://liteedgeai.com/ranking',
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.9,
