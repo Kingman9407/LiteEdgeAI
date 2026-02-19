@@ -68,6 +68,7 @@ interface SubmitBenchmarkParams {
     sessionId?: string;
     firstTokenLatencyMs?: number | null;
     totalBenchmarkTime?: number | null;
+    difficulty?: string | null;
 }
 
 
@@ -83,6 +84,7 @@ export async function submitBenchmarkToSupabase({
     sessionId,
     firstTokenLatencyMs,
     totalBenchmarkTime,
+    difficulty,
 }: SubmitBenchmarkParams) {
     devLog('Submitting benchmark for model:', modelName);
 
@@ -96,6 +98,7 @@ export async function submitBenchmarkToSupabase({
     debugGroup('sessionId', sessionId);
     debugGroup('firstTokenLatencyMs', firstTokenLatencyMs);
     debugGroup('totalBenchmarkTime', totalBenchmarkTime);
+    debugGroup('difficulty', difficulty);
 
     debugRequiredFields('top-level params', {
         modelName,
@@ -113,6 +116,7 @@ export async function submitBenchmarkToSupabase({
         'benchmarkResults.loadTime': benchmarkResults?.loadTime,
         firstTokenLatencyMs,
         totalBenchmarkTime,
+        difficulty,
     });
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -220,7 +224,7 @@ export async function submitBenchmarkToSupabase({
             p_benchmarks: enrichedBenchmarks,
             p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
             p_session_id: sessionId || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            p_difficulty: null,   // not passed by this call-site; keeps newer overload unambiguous
+            p_difficulty: difficulty ?? null,
         };
 
         console.debug('[DEBUG] Coerced numeric fields:', {
@@ -231,6 +235,7 @@ export async function submitBenchmarkToSupabase({
             p_load_time: rpcParams.p_load_time,
             p_first_token_latency_ms: rpcParams.p_first_token_latency_ms,
             p_total_benchmark_time: rpcParams.p_total_benchmark_time,
+            p_difficulty: rpcParams.p_difficulty,
         });
 
         // ── RPC PARAMS DEBUG ──────────────────────────────────────────────────
