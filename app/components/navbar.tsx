@@ -32,7 +32,7 @@ export default function Navbar() {
 
                 {/* Desktop Links */}
                 <div className="hidden md:flex gap-6 text-[#b0b4bb]">
-                    {['Home', 'Ranking', 'Benchmark',].map(item => (
+                    {['Home', 'Ranking', 'Benchmark', 'Photo'].map(item => (
                         <Link
                             key={item}
                             href={`/${item === 'Home' ? '' : item.toLowerCase()}`}
@@ -64,7 +64,7 @@ export default function Navbar() {
             {open && (
                 <div className="md:hidden border-t border-[#34363c] bg-[#232428] rounded-b-xl">
                     <div className="flex flex-col px-4 py-4 space-y-4 text-[#b0b4bb]">
-                        {['Home', 'Ranking', 'Benchmark',].map(item => (
+                        {['Home', 'Ranking', 'Benchmark', 'Photo'].map(item => (
                             <Link
                                 key={item}
                                 href={`/${item === 'Home' ? '' : item.toLowerCase()}`}

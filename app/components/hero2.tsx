@@ -47,8 +47,8 @@ export default function HowItWorks() {
                         </h3>
                         <p className="mt-2 text-sm text-[#b0b4bb]">
                             We measure load time, latency, throughput, and token
-                            generation speed to calculate normalized hardware
-                            performance scores.
+                            generation speed to calculate normalized AI benchmark
+                            performance scores used in our hardware ranking system.
                         </p>
                     </div>
 

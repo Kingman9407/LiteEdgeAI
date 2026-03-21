@@ -87,6 +87,8 @@ export default function WebLLMBenchmark() {
             loadTimeMs: results.totalBenchmarkTime * 1000,
             prompt: bench.prompt,
             response: bench.response,
+            maxTokens: bench.maxTokens,                            // ← now forwarded
+            firstTokenLatencyMs: bench.firstTokenLatencyMs,        // ← now forwarded
         }));
 
         setRawBenchmarkRuns(rawRuns);

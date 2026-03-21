@@ -11,18 +11,23 @@ export const metadata: Metadata = {
     title: "Run AI Benchmark in Browser",
     description:
         "Run real AI model benchmarks directly in your browser using WebGPU. Measure performance, latency, and efficiency of your hardware.",
+    alternates: {
+        canonical: "/benchmark",
+    },
     openGraph: {
         title: "Run AI Benchmark in Browser | LiteEdgeAI",
         description:
             "Benchmark your hardware with real AI models using WebGPU — no downloads, no installs.",
         url: "https://liteedgeai.com/benchmark",
         type: "website",
+        images: ["/og-image.png"],
     },
     twitter: {
         card: "summary_large_image",
         title: "Run AI Benchmark in Browser | LiteEdgeAI",
         description:
             "Benchmark your hardware using real AI models directly in the browser.",
+        images: ["/og-image.png"],
     },
 };
 

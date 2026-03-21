@@ -6,6 +6,22 @@ const BRAND_GREEN = '#4fbf8a';
 export const metadata = {
     title: 'Terms of Service — LiteEdgeAI',
     description: 'Terms and conditions for using LiteEdgeAI benchmarking platform.',
+    alternates: {
+        canonical: '/terms',
+    },
+    openGraph: {
+        title: 'Terms of Service — LiteEdgeAI',
+        description: 'Terms and conditions for using LiteEdgeAI benchmarking platform.',
+        url: 'https://liteedgeai.com/terms',
+        type: 'website',
+        images: ['/og-image.png'],
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'Terms of Service — LiteEdgeAI',
+        description: 'Terms and conditions for using LiteEdgeAI benchmarking platform.',
+        images: ['/og-image.png'],
+    },
 };
 
 export default function TermsOfServicePage() {

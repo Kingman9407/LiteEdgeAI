@@ -7,20 +7,17 @@ interface DeviceCapabilities {
     hasWebGPU: boolean;
     memoryGB: number;
     isMobile: boolean;
+    isUnifiedMemory?: boolean;
 }
 
-// Fixed context window per model (not based on RAM)
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
     'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC': 2048,
-    'Llama-3.2-1B-Instruct-q4f16_1-MLC': 4096,
     'Phi-3-mini-4k-instruct-q4f16_1-MLC': 4096,
     'Qwen2.5-1.5B-Instruct-q4f16_1-MLC': 4096,
-    'Mistral-7B-Instruct-v0.2-q4f16_1-MLC': 4096,
+    'Mistral-7B-Instruct-v0.2-q4f16_1-MLC': 8192,
 };
 
 const DEFAULT_CONTEXT_WINDOW = 4096;
-
-// [NEW] Fixed max_tokens used for every benchmark run (fairness across tests)
 export const BENCHMARK_MAX_TOKENS = 3000;
 
 export function useWebLLM() {
@@ -30,12 +27,20 @@ export function useWebLLM() {
     const [capabilities, setCapabilities] = useState<DeviceCapabilities | null>(null);
     const [contextWindowSize, setContextWindowSize] = useState<number | null>(null);
 
-    // -------- Device capability check (WebGPU only) --------
     const checkDeviceCapabilities = async (): Promise<DeviceCapabilities | null> => {
         const hasWebGPU = !!navigator.gpu;
 
         if (!hasWebGPU) {
-            setStatus('❌ WebGPU not supported. This application requires WebGPU.');
+            setStatus('❌ WebGPU not supported.');
+            return null;
+        }
+
+        const adapter = await navigator.gpu.requestAdapter({
+            powerPreference: 'high-performance',
+        });
+
+        if (!adapter) {
+            setStatus('❌ No WebGPU adapter found.');
             return null;
         }
 
@@ -45,95 +50,87 @@ export function useWebLLM() {
             navigator.userAgent
         );
 
+        // UMA detection via platform + user agent — no adapterInfo needed
+        const isUnifiedMemory =
+            /Mac|iPhone|iPad/i.test(navigator.platform) ||
+            /Apple Silicon|arm64/i.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
         const caps: DeviceCapabilities = {
             hasWebGPU,
             memoryGB,
             isMobile,
+            isUnifiedMemory,
         };
 
         setCapabilities(caps);
         return caps;
     };
 
-    // -------- Model recommendation based on device --------
     const recommendModel = (caps: DeviceCapabilities): string => {
         if (caps.memoryGB >= 8 && !caps.isMobile) {
-            return 'Llama-3.2-3B-Instruct-q4f16_1-MLC';
+            return 'Mistral-7B-Instruct-v0.2-q4f16_1-MLC';
         }
 
         if (caps.memoryGB >= 4) {
-            return 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+            return 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
         }
 
         return 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
     };
 
-    // -------- Context / token helpers --------
     const estimateTokens = (text: string): number => {
         if (!text.trim()) return 0;
         return Math.ceil(text.trim().split(/\s+/).length * 1.3);
     };
 
-    // Use up to ~90% of the context window for (prompt + completion)
-    // FIX: Uses fixed contextWindowSize (set per model), NOT memoryGB
     const computeMaxTokensFor90PctCtx = (prompt: string): number => {
-        // Use model-specific context window, not RAM-based fallback
         const ctx = contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
-
         const promptTokens = estimateTokens(prompt);
-
-        // Target total tokens (prompt + completion) = 90% of ctx
         const targetTotal = Math.floor(ctx * 0.9);
-
-        let budget = targetTotal - promptTokens;
-
-        // Safety margin for tokenizer mismatch
-        budget -= 32;
-
-        // Clamp budget
+        let budget = targetTotal - promptTokens - 32;
         budget = Math.max(16, budget);
         budget = Math.min(budget, ctx - promptTokens - 16);
-
         return budget;
     };
 
-    // -------- Load model --------
     const loadModel = async (modelId?: string) => {
         try {
             setStatus('🔍 Checking WebGPU support…');
             const caps = await checkDeviceCapabilities();
 
             if (!caps || !caps.hasWebGPU) {
-                setStatus(
-                    '❌ WebGPU is required. Please use a browser that supports WebGPU (Chrome 113+, Edge 113+).'
-                );
+                setStatus('❌ WebGPU is required. Please use Chrome 113+ or Edge 113+.');
                 return;
             }
 
             const selectedModel = modelId || recommendModel(caps);
-
-            setStatus(
-                `🔄 Initializing WebLLM with WebGPU on ${caps.isMobile ? 'mobile' : 'desktop'} device…`
-            );
+            setStatus(`🔄 Initializing WebLLM… (${caps.isUnifiedMemory ? 'Unified Memory' : 'Discrete GPU'})`);
             setModelLoaded(false);
 
             const engine = new webllm.MLCEngine();
+            engine.setInitProgressCallback((r) => setStatus(`📥 ${r.text}`));
 
-            engine.setInitProgressCallback((r) => {
-                setStatus(`📥 ${r.text}`);
-            });
-
-            // FIX: Use model-specific context window, not RAM-based
             const ctx = MODEL_CONTEXT_WINDOWS[selectedModel] ?? DEFAULT_CONTEXT_WINDOW;
 
-            await engine.reload(selectedModel, {
-                context_window_size: ctx,
-            });
+            // UMA devices get full context freely — no PCIe overhead
+            // Discrete GPUs get sliding window to reduce per-token PCIe transfers
+            const engineConfig = caps.isUnifiedMemory
+                ? {
+                    context_window_size: ctx,
+                }
+                : {
+                    context_window_size: ctx,
+                    sliding_window_size: Math.floor(ctx / 2),
+                    attention_sink_size: 4,
+                };
+
+            await engine.reload(selectedModel, engineConfig);
 
             engineRef.current = engine;
             setContextWindowSize(ctx);
             setModelLoaded(true);
-            setStatus(`✅ Model loaded successfully with WebGPU! (${selectedModel}, ctx=${ctx})`);
+            setStatus(`✅ ${selectedModel} loaded! ctx=${ctx} | ${caps.isUnifiedMemory ? 'UMA mode' : 'Discrete GPU mode'}`);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             setStatus(`❌ Error loading model: ${errorMessage}`);
@@ -141,21 +138,14 @@ export function useWebLLM() {
         }
     };
 
-    // -------- Non-streaming generation --------
     const generate = async (
         prompt: string,
-        options?: {
-            temperature?: number;
-            max_tokens?: number;
-        }
+        options?: { temperature?: number; max_tokens?: number }
     ) => {
-        if (!engineRef.current) {
-            throw new Error('Model not loaded. Please call loadModel first.');
-        }
+        if (!engineRef.current) throw new Error('Model not loaded.');
 
         try {
-            const maxTokens =
-                options?.max_tokens ?? computeMaxTokensFor90PctCtx(prompt);
+            const maxTokens = options?.max_tokens ?? computeMaxTokensFor90PctCtx(prompt);
 
             const reply = await engineRef.current.chat.completions.create({
                 messages: [{ role: 'user', content: prompt }],
@@ -171,17 +161,13 @@ export function useWebLLM() {
         }
     };
 
-    // -------- Streaming generation --------
     const generateStream = async function* (
         prompt: string,
         options?: { temperature?: number; max_tokens?: number }
     ) {
-        if (!engineRef.current) {
-            throw new Error('Model not loaded. Please call loadModel first.');
-        }
+        if (!engineRef.current) throw new Error('Model not loaded.');
 
-        const maxTokens =
-            options?.max_tokens ?? computeMaxTokensFor90PctCtx(prompt);
+        const maxTokens = options?.max_tokens ?? computeMaxTokensFor90PctCtx(prompt);
 
         const stream = await engineRef.current.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
@@ -192,9 +178,7 @@ export function useWebLLM() {
 
         for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content;
-            if (content) {
-                yield content;
-            }
+            if (content) yield content;
         }
     };
 
@@ -206,24 +190,19 @@ export function useWebLLM() {
         firstTokenLatencyMs: number;
         tokensPerSecond: number;
         tokenCount: number;
-        requestedMaxTokens: number;  // NEW: report what was actually used
+        requestedMaxTokens: number;
         text: string;
+        isUnifiedMemory: boolean;
     }> => {
         if (!engineRef.current) throw new Error('Model not loaded.');
 
-        // ✅ Clamp to what the model can actually handle
         const ctx = contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
         const promptTokens = estimateTokens(prompt);
-        const safeMax = Math.min(
-            maxTokens,
-            ctx - promptTokens - 64  // safety margin
-        );
+        const safeMax = Math.min(maxTokens, ctx - promptTokens - 64);
 
         if (safeMax < 16) {
             throw new Error(
-                `Prompt too long for context window. ` +
-                `ctx=${ctx}, prompt≈${promptTokens} tokens, ` +
-                `only ${ctx - promptTokens} left`
+                `Prompt too long. ctx=${ctx}, prompt≈${promptTokens} tokens, ${ctx - promptTokens} left`
             );
         }
 
@@ -236,7 +215,7 @@ export function useWebLLM() {
         const stream = await engineRef.current.chat.completions.create({
             messages: [{ role: 'user', content: prompt }],
             temperature,
-            max_tokens: safeMax,  // ← clamped value
+            max_tokens: safeMax,
             stream: true,
         });
 
@@ -245,19 +224,19 @@ export function useWebLLM() {
             if (!content) continue;
 
             if (streamStart === null) {
+                // First token — record TTFT and start the throughput clock.
+                // Count this token (fix: was previously excluded from tokenCount).
                 firstTokenLatencyMs = performance.now() - requestStart;
                 streamStart = performance.now();
+                tokenCount = 1;
             } else {
                 tokenCount++;
             }
             text += content;
         }
 
-        const streamDurationSec =
-            streamStart !== null ? (performance.now() - streamStart) / 1000 : 0;
-
-        const tokensPerSecond =
-            streamDurationSec > 0 ? tokenCount / streamDurationSec : 0;
+        const streamDurationSec = streamStart !== null ? (performance.now() - streamStart) / 1000 : 0;
+        const tokensPerSecond = streamDurationSec > 0 ? tokenCount / streamDurationSec : 0;
 
         return {
             firstTokenLatencyMs,
@@ -265,10 +244,10 @@ export function useWebLLM() {
             tokenCount,
             requestedMaxTokens: safeMax,
             text,
+            isUnifiedMemory: capabilities?.isUnifiedMemory ?? false,
         };
     };
 
-    // -------- Unload model --------
     const unloadModel = async () => {
         if (engineRef.current) {
             await engineRef.current.unload();
@@ -288,7 +267,7 @@ export function useWebLLM() {
         loadModel,
         generate,
         generateStream,
-        generateStreamBenchmark, // [NEW] export for BenchmarkPanel
+        generateStreamBenchmark,
         unloadModel,
         recommendModel,
         checkDeviceCapabilities,

@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { BENCHMARKS } from '../data/benchmarkTests';
 import { BenchmarkResult, BenchmarkMode } from '../types/types';
 
-const ITERATIONS_PER_TEST = 3;
+const ITERATIONS_PER_TEST = 4;   // ≥4 so dropAndAverage can drop the worst outlier
 
 interface Props {
     runPromptBenchmark: (prompt: string, maxTokens: number) => Promise<{
@@ -48,6 +48,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
 
         const benchmarkStartTime = performance.now();
 
+        // Global warmup — prime the engine on the first test prompt
         setPhase('warmup');
         await runPromptBenchmark(tests[0].prompt, tests[0].maxTokens);
 
@@ -57,9 +58,20 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
             setCurrent(i + 1);
             const test = tests[i];
 
+            // Per-test warmup: primes the KV-cache for prompts that differ
+            // significantly from the previous test (eliminates cold-cache bias
+            // on tests 2..N which have no dedicated warmup otherwise).
+            if (i > 0) {
+                setPhase(`warmup test ${i + 1}/${tests.length} "${test.name}"`);
+                await runPromptBenchmark(test.prompt, Math.min(test.maxTokens, 64));
+            }
+
             const iterTPS: number[] = [];
             const iterFTL: number[] = [];
             const iterTokens: number[] = [];
+            const iterTime: number[] = [];   // ← real wall-clock seconds per run
+            const iterStart: number[] = [];  // ← real epoch ms start per run
+            const iterEnd: number[] = [];    // ← real epoch ms end per run
             let lastText = '';
 
             for (let iter = 0; iter < ITERATIONS_PER_TEST; iter++) {
@@ -69,33 +81,47 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                     `iter ${iter + 1}/${ITERATIONS_PER_TEST}`
                 );
 
+                const wallStart = Date.now();
+                const perfStart = performance.now();
+
                 const { firstTokenLatencyMs, tokensPerSecond, tokenCount, text } =
                     await runPromptBenchmark(test.prompt, test.maxTokens);
+
+                const wallEnd = Date.now();
+                const elapsedSec = (performance.now() - perfStart) / 1000;
 
                 iterTPS.push(tokensPerSecond);
                 iterFTL.push(firstTokenLatencyMs);
                 iterTokens.push(tokenCount);
+                iterTime.push(elapsedSec);
+                iterStart.push(wallStart);
+                iterEnd.push(wallEnd);
                 lastText = text;
             }
 
             const avgTPS = dropAndAverage(iterTPS);
             const avgFTL = dropAndAverage(iterFTL);
             const avgTokens = Math.round(dropAndAverage(iterTokens));
-            const approxTime = avgTokens / (avgTPS || 1);
+            // Use the real measured wall-clock time, NOT the circular tokens/tps estimate
+            const avgTime = dropAndAverage(iterTime);
+            // Representative timestamps: use the median iteration (index 1 after sort)
+            const midIdx = Math.floor(iterStart.length / 2);
+            const repStart = iterStart[midIdx];
+            const repEnd = iterEnd[midIdx];
 
             finalResults.push({
                 name: test.name,
                 prompt: test.prompt,
                 response: lastText,
-                totalTime: approxTime,
+                totalTime: avgTime,          // ← real wall-clock, not approximated
                 tokenCount: avgTokens,
                 maxTokens: test.maxTokens,
                 wordCount: lastText.trim().split(/\s+/).length,
                 charCount: lastText.length,
                 tokensPerSecond: avgTPS,
                 firstTokenLatencyMs: avgFTL,
-                startTime: Date.now(),
-                endTime: Date.now() + Math.round(approxTime * 1000),
+                startTime: repStart,         // ← real epoch ms start
+                endTime: repEnd,             // ← real epoch ms end
             });
 
             setResults([...finalResults]);
@@ -106,7 +132,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
 
         const totalTokens = finalResults.reduce((a, b) => a + b.tokenCount, 0);
         const totalTime = finalResults.reduce((a, b) => a + b.totalTime, 0);
-        const avgTokensPerSec = totalTokens / totalTime;
+        const avgTokensPerSec = totalTime > 0 ? totalTokens / totalTime : 0;
         const avgFTL =
             finalResults.reduce((a, b) => a + (b.firstTokenLatencyMs ?? 0), 0) /
             finalResults.length;

@@ -22,7 +22,14 @@ export const metadata: Metadata = {
   },
   description:
     "Benchmark and rank your hardware for AI performance using WebGPU. Run real AI models directly in your browser.",
+  keywords: ["AI Benchmark", "GPU Ranking", "WebGPU", "Hardware Performance", "LiteEdgeAI", "Local AI"],
+  authors: [{ name: "LiteEdgeAI Team" }],
+  creator: "LiteEdgeAI",
+  publisher: "LiteEdgeAI",
   metadataBase: new URL("https://liteedgeai.com"),
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     type: "website",
     siteName: "LiteEdgeAI",
@@ -30,16 +37,29 @@ export const metadata: Metadata = {
     description:
       "Benchmark and rank your hardware for AI performance using WebGPU.",
     url: "https://liteedgeai.com",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "LiteEdgeAI Hardware AI Benchmark",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "LiteEdgeAI — Hardware AI Benchmark",
     description:
       "Benchmark and rank your hardware for AI performance using WebGPU.",
+    images: ["/og-image.png"],
   },
   robots: {
     index: true,
     follow: true,
+  },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png", // Assuming existence or fallback
   },
 };
 

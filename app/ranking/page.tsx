@@ -9,18 +9,23 @@ export const metadata: Metadata = {
     title: "GPU Rankings & Benchmarks",
     description:
         "Live GPU rankings across all devices. Compare AI and compute performance using real benchmark data.",
+    alternates: {
+        canonical: "/ranking",
+    },
     openGraph: {
         title: "GPU Rankings & Benchmarks | LiteEdgeAI",
         description:
             "Compare GPU performance across devices with real-world AI benchmarks.",
-        url: "https://liteedgeai.com/rankings",
+        url: "https://liteedgeai.com/ranking",
         type: "website",
+        images: ["/og-image.png"],
     },
     twitter: {
         card: "summary_large_image",
         title: "GPU Rankings & Benchmarks | LiteEdgeAI",
         description:
             "Live GPU rankings and AI benchmark results across all devices.",
+        images: ["/og-image.png"],
     },
 };
 

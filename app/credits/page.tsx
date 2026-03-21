@@ -1,9 +1,27 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Navbar from '../components/navbar';
 import Footer from '../components/footer';
 
-const BRAND_GREEN = '#4fbf8a';
+export const metadata: Metadata = {
+    title: 'Credits — LiteEdgeAI',
+    description: 'Credits and acknowledgments for the open-source projects that power LiteEdgeAI.',
+    alternates: {
+        canonical: '/credits',
+    },
+    openGraph: {
+        title: 'Credits — LiteEdgeAI',
+        description: 'Credits and acknowledgments for the open-source projects that power LiteEdgeAI.',
+        url: 'https://liteedgeai.com/credits',
+        type: 'website',
+        images: ['/og-image.png'],
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'Credits — LiteEdgeAI',
+        description: 'Credits and acknowledgments for the open-source projects that power LiteEdgeAI.',
+        images: ['/og-image.png'],
+    },
+};
 
 export default function CreditsPage() {
     return (

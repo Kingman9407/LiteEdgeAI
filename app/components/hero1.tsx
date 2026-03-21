@@ -6,12 +6,11 @@ export default function Hero() {
         <section className="flex items-center justify-center min-h-[80vh] px-6">
             <div className="max-w-3xl text-center">
                 <h1 className="text-4xl md:text-5xl font-extrabold text-[#f2f3f5]">
-                    Benchmark Your Hardware for AI
+                    AI Benchmark Tool & Hardware Performance Ranking
                 </h1>
 
                 <h2 className="mt-4 text-lg">
-                    Benchmark and rank your hardware based on real AI performance
-                </h2>
+                    Use our AI benchmark tool to run real AI models directly on your hardware, measure performance, and submit verified results to our public AI benchmark ranking database — all from your browser.                </h2>
 
                 <div className="mt-6 flex justify-center gap-3 sm:gap-6">
                     <Link href="/benchmark" prefetch>

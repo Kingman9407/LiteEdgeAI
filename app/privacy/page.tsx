@@ -6,6 +6,22 @@ const BRAND_GREEN = '#4fbf8a';
 export const metadata = {
     title: 'Privacy Policy — LiteEdgeAI',
     description: 'How LiteEdgeAI handles your data during benchmarking.',
+    alternates: {
+        canonical: '/privacy',
+    },
+    openGraph: {
+        title: 'Privacy Policy — LiteEdgeAI',
+        description: 'How LiteEdgeAI handles your data during benchmarking.',
+        url: 'https://liteedgeai.com/privacy',
+        type: 'website',
+        images: ['/og-image.png'],
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'Privacy Policy — LiteEdgeAI',
+        description: 'How LiteEdgeAI handles your data during benchmarking.',
+        images: ['/og-image.png'],
+    },
 };
 
 export default function PrivacyPolicyPage() {

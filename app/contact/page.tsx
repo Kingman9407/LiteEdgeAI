@@ -6,6 +6,22 @@ const BRAND_GREEN = '#4fbf8a';
 export const metadata = {
     title: 'Contact — LiteEdgeAI',
     description: 'Get in touch with the LiteEdgeAI team.',
+    alternates: {
+        canonical: '/contact',
+    },
+    openGraph: {
+        title: 'Contact — LiteEdgeAI',
+        description: 'Get in touch with the LiteEdgeAI team.',
+        url: 'https://liteedgeai.com/contact',
+        type: 'website',
+        images: ['/og-image.png'],
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'Contact — LiteEdgeAI',
+        description: 'Get in touch with the LiteEdgeAI team.',
+        images: ['/og-image.png'],
+    },
 };
 
 export default function ContactPage() {
