@@ -86,6 +86,7 @@ async function safeComputeBlur(url: string, name: string): Promise<number> {
         return BLUR_THRESHOLD; // treat as sharp — don't silently drop the file
     }
 }
+const MIN_FACE_QUALITY = 0.28; // ~20px IOD in original image
 
 async function safeFaceDetect(url: string, name: string) {
     try {
@@ -193,7 +194,10 @@ export function usePhotos() {
     // The overlay will ALWAYS reach idle — no more stuck spinners.
     // ─────────────────────────────────────────────────────────────────────────
 
-    type FaceFile = GroupFile & { embs: number[][] };
+    type FaceFile = GroupFile & {
+        embs: number[][];
+        quality: number; // face quality score from processImage()
+    };
 
     const runPipeline = async (incoming: GroupFile[], groupId: number) => {
         const imageFiles = incoming.filter((f) => f.kind === "image");
@@ -321,12 +325,10 @@ export function usePhotos() {
                 });
 
                 const results = await safeFaceDetect(gf.url, gf.name);
-
-                // Match Python: best_face = max(faces, key=lambda f: f.det_score)
-                // Take ONE embedding — the highest-confidence face detected.
-                // (Old code collected all embeddings; clustering then used embs[0]
-                //  which isn't guaranteed to be the best face.)
-                const validResults = results.filter((r) => r.confidence >= 0.5);
+                const validResults = results.filter(
+                    (r) => r.confidence >= 0.5
+                        && r.quality >= MIN_FACE_QUALITY // FIX: gate on face size
+                );
                 validResults.sort((a, b) => b.confidence - a.confidence);
                 const bestFace = validResults[0];
                 const embs: number[][] = bestFace ? [bestFace.embedding] : [];
@@ -334,9 +336,8 @@ export function usePhotos() {
 
                 if (hasFace) {
                     faceCount++;
-                    // SPEED: DB write is fire-and-forget — doesn't affect pipeline
                     void safeUpdateEmbeddings(gf.key, embs);
-                    withFaces.push({ ...gf, embs, hasFace: true });
+                    withFaces.push({ ...gf, embs, hasFace: true, quality: bestFace!.quality });
                 } else {
                     noFaceCount++;
                 }

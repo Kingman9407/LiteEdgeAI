@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
           { key: "Cross-Origin-Embedder-Policy",  value: "require-corp" },
         ],
       },
-      // ── CORP for static assets (WASM + ONNX models) ──────────────────────────
+      // ── CORP for static assets (WASM + ONNX models + ORT JS/MJS) ─────────────
       // COEP: require-corp requires every sub-resource to carry a
       // Cross-Origin-Resource-Policy header, even when served from the same
       // origin. Next.js static files don't get this header by default, so the
@@ -24,6 +24,13 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
           { key: "Content-Type",                 value: "application/wasm" },
+        ],
+      },
+      {
+        // ORT v1.20 JSEP runtime file — needed by WebGPU/WebNN EP
+        source: "/:file*.mjs",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
         ],
       },
       {

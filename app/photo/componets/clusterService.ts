@@ -12,7 +12,7 @@
 
 // ─── Constants (matching Python) ─────────────────────────────────────────────
 
-const DEFAULT_THRESHOLD = 0.68;   // InsightFace buffalo_l ArcFace recommended
+const DEFAULT_THRESHOLD = 0.45;
 const DEFAULT_ITERATIONS = 20;
 const CHUNK_SIZE = 64;     // rows per parallel chunk (mirrors ThreadPool batching)
 

@@ -1,27 +1,34 @@
-/**
- * eyeService.ts
- * Eyes-closed detection using MediaPipe FaceLandmarker + Eye Aspect Ratio.
- *
- * MATCHES PYTHON photo.py EXACTLY:
- *   - Same landmark indices: LEFT_EYE=[362,385,387,263,373,380], RIGHT_EYE=[33,160,158,133,153,144]
- *   - Same EAR formula: (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)
- *   - Same EAR_THRESHOLD = 0.2
- *   - Processes RESIZED image (max 640px), matching Python's `eyes_open_check(resized)`
- *   - Permissive on no-face (returns eyesClosed=false), matching Python
- */
-
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
-// ─── Constants (matching Python exactly) ─────────────────────────────────────
+if (typeof window === "undefined") {
+    throw new Error(
+        "[eyeService] This module must only be imported on the client side. " +
+        "Use next/dynamic with { ssr: false } or a 'use client' dynamic import."
+    );
+}
+
+const _origConsoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+    if (
+        typeof args[0] === "string" &&
+        (args[0].includes("TensorFlow Lite XNNPACK delegate") ||
+            (args[0].includes("INFO:") && args[0].includes("TensorFlow")))
+    ) return;
+    _origConsoleError(...args);
+};
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const EAR_THRESHOLD = 0.2;
 const MAX_RESIZE = 640;
 
-// MediaPipe 478-point model landmark indices for EAR computation
-const LEFT_EYE  = [362, 385, 387, 263, 373, 380]; // [p1,p2,p3,p4,p5,p6]
-const RIGHT_EYE = [33,  160, 158, 133, 153, 144]; // [p1,p2,p3,p4,p5,p6]
+const LEFT_EYE = [362, 385, 387, 263, 373, 380];
+const RIGHT_EYE = [33, 160, 158, 133, 153, 144];
 
-// ─── Singleton model cache ───────────────────────────────────────────────────
+const WASM_PATH = "/mediapipe-wasm";
+const MODEL_PATH = "/models/face_landmarker.task";
+
+// ─── Singleton model cache ────────────────────────────────────────────────────
 
 let landmarkerInstance: FaceLandmarker | null = null;
 let loadingPromise: Promise<FaceLandmarker> | null = null;
@@ -31,22 +38,28 @@ async function getLandmarker(): Promise<FaceLandmarker> {
     if (loadingPromise) return loadingPromise;
 
     loadingPromise = (async () => {
-        const vision = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-        );
-
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
-            baseOptions: {
-                modelAssetPath:
-                    "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-                delegate: "GPU",
-            },
-            runningMode: "IMAGE",
-            numFaces: 1,
-            outputFacialTransformationMatrixes: false,
-            outputFaceBlendshapes: false,
-        });
-
+        const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+        let landmarker: FaceLandmarker;
+        try {
+            landmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: MODEL_PATH, delegate: "GPU" },
+                runningMode: "IMAGE",
+                numFaces: 1,
+                outputFacialTransformationMatrixes: false,
+                outputFaceBlendshapes: false,
+            });
+            console.log("[eyeService] ✅ FaceLandmarker loaded (GPU delegate)");
+        } catch (gpuErr) {
+            console.warn("[eyeService] GPU delegate failed, retrying with CPU.", gpuErr);
+            landmarker = await FaceLandmarker.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: MODEL_PATH, delegate: "CPU" },
+                runningMode: "IMAGE",
+                numFaces: 1,
+                outputFacialTransformationMatrixes: false,
+                outputFaceBlendshapes: false,
+            });
+            console.log("[eyeService] ✅ FaceLandmarker loaded (CPU delegate)");
+        }
         landmarkerInstance = landmarker;
         return landmarker;
     })();
@@ -54,95 +67,180 @@ async function getLandmarker(): Promise<FaceLandmarker> {
     return loadingPromise;
 }
 
-// ─── EAR computation ─────────────────────────────────────────────────────────
+// ─── EAR computation ──────────────────────────────────────────────────────────
 
-/**
- * Euclidean distance between two PIXEL-space points.
- * IMPORTANT: MediaPipe Tasks Vision returns normalized [0,1] landmarks.
- * They must be scaled to pixel space BEFORE calling this, otherwise EAR
- * is wrong on non-square images because X and Y cover different pixel ranges.
- * Python: pts.append(np.array([lm.x * img_w, lm.y * img_h]))
- */
 function dist(ax: number, ay: number, bx: number, by: number): number {
-    const dx = ax - bx;
-    const dy = ay - by;
+    const dx = ax - bx, dy = ay - by;
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-/**
- * Eye Aspect Ratio for 6 landmark points — computed in PIXEL SPACE.
- *
- *     p2  p3
- *    /      \
- *   p1      p4
- *    \      /
- *     p6  p5
- *
- * EAR = (||p2−p6|| + ||p3−p5||) / (2 × ||p1−p4||)
- *
- * Matches Python eye_aspect_ratio() which scales landmarks to pixel coords.
- */
 function computeEAR(
     landmarks: { x: number; y: number }[],
     indices: number[],
     imgW: number,
-    imgH: number
+    imgH: number,
 ): number {
-    // Scale normalized [0,1] landmarks to pixel coordinates — matching Python:
-    //   pts.append(np.array([lm.x * img_w, lm.y * img_h]))
     const pts = indices.map((i) => ({
         px: landmarks[i].x * imgW,
         py: landmarks[i].y * imgH,
     }));
     const [p1, p2, p3, p4, p5, p6] = pts;
-    const A = dist(p2.px, p2.py, p6.px, p6.py); // vertical 1
-    const B = dist(p3.px, p3.py, p5.px, p5.py); // vertical 2
-    const C = dist(p1.px, p1.py, p4.px, p4.py); // horizontal
+    const A = dist(p2.px, p2.py, p6.px, p6.py);
+    const B = dist(p3.px, p3.py, p5.px, p5.py);
+    const C = dist(p1.px, p1.py, p4.px, p4.py);
     if (C === 0) return 0;
     return (A + B) / (2 * C);
 }
 
-// ─── Image resize helper (matching Python MAX_RESIZE) ────────────────────────
+// ─── Canvas utilities ─────────────────────────────────────────────────────────
 
 /**
- * Load image and resize to max MAX_RESIZE px, matching Python's
- * `resize_image(image, max_dim=MAX_RESIZE)` before `eyes_open_check(resized)`.
+ * Stepwise halving resize — same as faceService.ts.
+ * Avoids aliasing when downscaling > 2× (e.g. 4K → 640px).
  */
-function loadAndResizeImage(imageUrl: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            const origW = img.width;
-            const origH = img.height;
+function stepwiseResize(
+    source: HTMLCanvasElement | HTMLImageElement | ImageBitmap,
+    targetW: number,
+    targetH: number,
+): HTMLCanvasElement {
+    const srcW = (source as any).naturalWidth ?? (source as any).width;
+    const srcH = (source as any).naturalHeight ?? (source as any).height;
 
-            // If already within MAX_RESIZE, use as-is
-            if (Math.max(origW, origH) <= MAX_RESIZE) {
-                resolve(img);
-                return;
-            }
+    if (srcW <= targetW * 2 && srcH <= targetH * 2) {
+        const out = document.createElement("canvas");
+        out.width = targetW; out.height = targetH;
+        const ctx = out.getContext("2d")!;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(source as CanvasImageSource, 0, 0, targetW, targetH);
+        return out;
+    }
 
-            // Resize to max 640px via canvas, then create a new image
-            const scale = MAX_RESIZE / Math.max(origW, origH);
-            const w = Math.round(origW * scale);
-            const h = Math.round(origH * scale);
+    let current: CanvasImageSource = source as CanvasImageSource;
+    let curW = srcW, curH = srcH;
 
-            const canvas = document.createElement("canvas");
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext("2d")!;
-            ctx.drawImage(img, 0, 0, w, h);
+    while (curW > targetW * 2 || curH > targetH * 2) {
+        const nextW = Math.max(Math.trunc(curW / 2), targetW);
+        const nextH = Math.max(Math.trunc(curH / 2), targetH);
+        const tmp = document.createElement("canvas");
+        tmp.width = nextW; tmp.height = nextH;
+        const ctx = tmp.getContext("2d")!;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(current, 0, 0, nextW, nextH);
+        current = tmp;
+        curW = nextW; curH = nextH;
+    }
 
-            const resizedImg = new Image();
-            resizedImg.onload = () => resolve(resizedImg);
-            resizedImg.onerror = () => reject(new Error("Resized image load failed"));
-            resizedImg.src = canvas.toDataURL("image/png");
-        };
-        img.onerror = () => reject(new Error("Image load failed"));
-        img.src = imageUrl;
-    });
+    const out = document.createElement("canvas");
+    out.width = targetW; out.height = targetH;
+    const ctx = out.getContext("2d")!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(current, 0, 0, targetW, targetH);
+    return out;
 }
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+/**
+ * Load image and produce a canvas ready for MediaPipe.
+ *
+ * FIX 1: colorSpaceConversion:"none" — raw pixels, matches cv2.imread.
+ * FIX 2: Math.trunc — matches Python int() truncation.
+ * FIX 3: stepwiseResize — no alias noise from large downscales.
+ * FIX 4: optional faceCrop — zooms to the detected face region before
+ *         passing to MediaPipe so small faces get reliable landmark coords,
+ *         and the correct face is always checked in group shots.
+ */
+async function loadFaceCanvas(
+    imageUrl: string,
+    faceCrop?: { xmin: number; ymin: number; xmax: number; ymax: number },
+): Promise<HTMLCanvasElement> {
+    let bitmap: ImageBitmap | null = null;
+
+    if (typeof createImageBitmap !== "undefined") {
+        try {
+            const resp = await fetch(imageUrl, { credentials: "same-origin" });
+            const blob = await resp.blob();
+            bitmap = await createImageBitmap(blob, {
+                colorSpaceConversion: "none", // FIX 1: raw pixels
+            });
+        } catch {
+            bitmap = null;
+        }
+    }
+
+    // Fallback path — <img> element, no color management control
+    if (!bitmap) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const canvas = buildFaceCanvas(img, faceCrop);
+                resolve(canvas);
+            };
+            img.onerror = () => reject(new Error(`Image load failed: ${imageUrl}`));
+            img.src = imageUrl;
+        });
+    }
+
+    const canvas = buildFaceCanvas(bitmap, faceCrop);
+    bitmap.close();
+    return canvas;
+}
+
+function buildFaceCanvas(
+    source: HTMLImageElement | ImageBitmap,
+    faceCrop?: { xmin: number; ymin: number; xmax: number; ymax: number },
+): HTMLCanvasElement {
+    const srcW = (source as any).naturalWidth ?? (source as any).width;
+    const srcH = (source as any).naturalHeight ?? (source as any).height;
+
+    if (!faceCrop) {
+        // No crop — resize full image to max 640px
+        const scale = Math.min(1, MAX_RESIZE / Math.max(srcW, srcH));
+        const w = Math.trunc(srcW * scale); // FIX 2: truncate
+        const h = Math.trunc(srcH * scale);
+        return stepwiseResize(source as CanvasImageSource, w, h); // FIX 3: stepwise
+    }
+
+    // FIX 4: crop to face bounding box first, then resize to 640px.
+    // This guarantees:
+    //   a) The correct face is passed to MediaPipe (not just the largest one).
+    //   b) Small faces in zoomed-out shots are scaled up to fill the canvas —
+    //      eye region becomes large enough for reliable landmark detection.
+    //   c) Background behind other faces is excluded entirely.
+    const cropX = Math.max(0, Math.floor(faceCrop.xmin));
+    const cropY = Math.max(0, Math.floor(faceCrop.ymin));
+    const cropW = Math.min(srcW - cropX, Math.ceil(faceCrop.xmax - faceCrop.xmin));
+    const cropH = Math.min(srcH - cropY, Math.ceil(faceCrop.ymax - faceCrop.ymin));
+
+    // Add 40% margin on each side so MediaPipe sees enough context for mesh fitting
+    const margin = Math.max(cropW, cropH) * 0.4;
+    const padX = Math.max(0, Math.floor(cropX - margin));
+    const padY = Math.max(0, Math.floor(cropY - margin));
+    const padX2 = Math.min(srcW, Math.ceil(cropX + cropW + margin));
+    const padY2 = Math.min(srcH, Math.ceil(cropY + cropH + margin));
+    const padW = padX2 - padX;
+    const padH = padY2 - padY;
+
+    // Extract crop
+    const cropCanvas = document.createElement("canvas");
+    cropCanvas.width = padW;
+    cropCanvas.height = padH;
+    cropCanvas.getContext("2d")!.drawImage(
+        source as CanvasImageSource,
+        padX, padY, padW, padH,
+        0, 0, padW, padH,
+    );
+
+    // Resize crop to max 640px
+    const scale = Math.min(1, MAX_RESIZE / Math.max(padW, padH));
+    const w = Math.trunc(padW * scale); // FIX 2
+    const h = Math.trunc(padH * scale);
+    return stepwiseResize(cropCanvas, w, h); // FIX 3
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export type EyeCheckResult = {
     eyesClosed: boolean;
@@ -150,58 +248,40 @@ export type EyeCheckResult = {
 };
 
 /**
- * Check if eyes are closed in an image using MediaPipe FaceLandmarker + EAR.
+ * Check if eyes are closed using MediaPipe FaceLandmarker + EAR.
  *
- * Matches Python exactly:
- *   1. Resize to max 640px
- *   2. Run MediaPipe face mesh
- *   3. Compute EAR for both eyes
- *   4. Return closed if avgEAR < 0.2
- *
- * @param imageUrl - Object URL or data URL of the image
- * @returns { eyesClosed, ear } — ear < 0.2 means eyes closed
+ * @param imageUrl  Object URL or data URL of the image.
+ * @param faceCrop  Optional bounding box from faceService — when provided the
+ *                  eye check runs on the correct face rather than MediaPipe's
+ *                  largest-face heuristic. Required for group shots and
+ *                  zoomed-out images where face size < ~80px.
  */
-export async function checkEyes(imageUrl: string): Promise<EyeCheckResult> {
+export async function checkEyes(
+    imageUrl: string,
+    faceCrop?: { xmin: number; ymin: number; xmax: number; ymax: number },
+): Promise<EyeCheckResult> {
     const landmarker = await getLandmarker();
+    const canvas = await loadFaceCanvas(imageUrl, faceCrop);
+    const imgW = canvas.width;
+    const imgH = canvas.height;
 
-    // Load and RESIZE to max 640px (matching Python: eyes_open_check(resized))
-    const img = await loadAndResizeImage(imageUrl);
-
-    // Pixel dimensions of the resized image — needed to un-normalize landmarks.
-    // MediaPipe Tasks Vision returns normalized [0,1] coords; EAR must be
-    // computed in pixel space to handle non-square images correctly.
-    const imgW = img.width;
-    const imgH = img.height;
-
-    // Run face landmark detection
-    const result = landmarker.detect(img);
+    const result = landmarker.detect(canvas);
 
     if (!result.faceLandmarks || result.faceLandmarks.length === 0) {
-        // No face found by MediaPipe — be permissive (match Python behavior)
         return { eyesClosed: false, ear: 1.0 };
     }
 
     const landmarks = result.faceLandmarks[0];
-
-    // Pass imgW/imgH so computeEAR scales to pixel space — matches Python:
-    //   h, w = image.shape[:2]
-    //   pts.append(np.array([lm.x * img_w, lm.y * img_h]))
-    const leftEAR  = computeEAR(landmarks, LEFT_EYE,  imgW, imgH);
+    const leftEAR = computeEAR(landmarks, LEFT_EYE, imgW, imgH);
     const rightEAR = computeEAR(landmarks, RIGHT_EYE, imgW, imgH);
     const avgEAR = (leftEAR + rightEAR) / 2;
 
-    // Python: return avg_ear >= EAR_THRESHOLD  (open if >= 0.2)
-    // So eyes are CLOSED when avg_ear < EAR_THRESHOLD
     return {
         eyesClosed: avgEAR < EAR_THRESHOLD,
         ear: avgEAR,
     };
 }
 
-/**
- * Pre-load the MediaPipe model (call from the pipeline before per-file processing).
- * Resolves once the model is ready.
- */
 export async function preloadEyeModel(): Promise<void> {
     await getLandmarker();
 }
