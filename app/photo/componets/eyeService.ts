@@ -200,7 +200,7 @@ function buildFaceCanvas(
         const scale = Math.min(1, MAX_RESIZE / Math.max(srcW, srcH));
         const w = Math.trunc(srcW * scale); // FIX 2: truncate
         const h = Math.trunc(srcH * scale);
-        return stepwiseResize(source as CanvasImageSource, w, h); // FIX 3: stepwise
+        return stepwiseResize(source, w, h); // FIX 3: stepwise
     }
 
     // FIX 4: crop to face bounding box first, then resize to 640px.
