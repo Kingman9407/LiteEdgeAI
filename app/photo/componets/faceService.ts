@@ -10,7 +10,7 @@ if (typeof window === "undefined") {
 
 // Import the "all" bundle — the default ORT import in v1.20 only includes WASM.
 // "onnxruntime-web/all" includes WebGPU, WebGL, WebNN and WASM EPs.
-import * as ort from "onnxruntime-web/all";
+import * as ort from "onnxruntime-web";
 
 // Serve WASM files from /public — must be copied from node_modules/onnxruntime-web/dist/
 // Run: cp node_modules/onnxruntime-web/dist/ort-wasm* public/
