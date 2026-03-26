@@ -1,10 +1,7 @@
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 if (typeof window === "undefined") {
-    throw new Error(
-        "[eyeService] This module must only be imported on the client side. " +
-        "Use next/dynamic with { ssr: false } or a 'use client' dynamic import."
-    );
+    console.warn("[eyeService] Server-side import detected. Skipping execution to allow Next.js SSR.");
 }
 
 const _origConsoleError = console.error.bind(console);

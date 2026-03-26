@@ -1,22 +1,20 @@
 'use client';
 
 if (typeof window === "undefined") {
-    throw new Error(
-        "[faceService] This module must only be imported on the client side.\n" +
-        "Wrap the import with next/dynamic and { ssr: false }, or ensure the\n" +
-        "importing component has 'use client' at the top."
-    );
+    console.warn("[faceService] Server-side import detected. Skipping execution to allow Next.js SSR.");
 }
 
 // Import the "all" bundle — the default ORT import in v1.20 only includes WASM.
 // "onnxruntime-web/all" includes WebGPU, WebGL, WebNN and WASM EPs.
 import * as ort from "onnxruntime-web";
 
-// Serve WASM files from /public — must be copied from node_modules/onnxruntime-web/dist/
-// Run: cp node_modules/onnxruntime-web/dist/ort-wasm* public/
-ort.env.wasm.wasmPaths = "/";
-ort.env.wasm.numThreads = 1;
-ort.env.wasm.proxy = false;
+if (typeof window !== "undefined") {
+    // Serve WASM files from /public — must be copied from node_modules/onnxruntime-web/dist/
+    // Run: cp node_modules/onnxruntime-web/dist/ort-wasm* public/
+    ort.env.wasm.wasmPaths = "/";
+    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.proxy = false;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

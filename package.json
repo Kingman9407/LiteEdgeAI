@@ -6,7 +6,7 @@
     "copy-wasm": "node scripts/copy-ort-wasm.js",
     "predev": "npm run copy-wasm",
     "dev": "next dev",
-    "prebuild": "npm run copy-wasm",
+    "prebuild": "git lfs pull && npm run copy-wasm",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
