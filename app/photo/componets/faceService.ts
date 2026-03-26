@@ -141,11 +141,12 @@ async function probeWebGL(): Promise<boolean> {
     }
 }
 
-let _epCache: { webnn: false | { deviceType: string }; webgpu: boolean; webgl: boolean } | null = null;
+type EPCache = { webnn: false | { deviceType: string }; webgpu: boolean; webgl: boolean };
+let _epCache: EPCache | null = null;
 // Store the promise so parallel callers share the same probes instead of racing.
-let _epCachePromise: Promise<typeof _epCache> | null = null;
+let _epCachePromise: Promise<EPCache> | null = null;
 
-async function getEPCapabilities() {
+async function getEPCapabilities(): Promise<EPCache> {
     if (_epCache) return _epCache;
     if (!_epCachePromise) {
         _epCachePromise = (async () => {
