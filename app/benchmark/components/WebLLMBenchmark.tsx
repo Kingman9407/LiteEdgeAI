@@ -31,7 +31,7 @@ interface RawBenchmarkRun {
 const BRAND_GREEN = '#4fbf8a';
 
 export default function WebLLMBenchmark() {
-    const [model, setModel] = useState('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+    const [model, setModel] = useState('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
     const [showGPU, setShowGPU] = useState(false);
     const [showSubmitPage, setShowSubmitPage] = useState(false);
     const [specs, setSpecs] = useState<PCSpecs | null>(null);

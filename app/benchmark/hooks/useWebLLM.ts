@@ -11,10 +11,9 @@ interface DeviceCapabilities {
 }
 
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+    'Qwen2.5-0.5B-Instruct-q4f16_1-MLC': 4096,
     'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC': 2048,
-    'Phi-3-mini-4k-instruct-q4f16_1-MLC': 4096,
-    'Qwen2.5-1.5B-Instruct-q4f16_1-MLC': 4096,
-    'Mistral-7B-Instruct-v0.2-q4f16_1-MLC': 8192,
+    'Llama-3.2-1B-Instruct-q4f16_1-MLC': 4096,
 };
 
 const DEFAULT_CONTEXT_WINDOW = 4096;
@@ -68,15 +67,15 @@ export function useWebLLM() {
     };
 
     const recommendModel = (caps: DeviceCapabilities): string => {
-        if (caps.memoryGB >= 8 && !caps.isMobile) {
-            return 'Mistral-7B-Instruct-v0.2-q4f16_1-MLC';
-        }
-
         if (caps.memoryGB >= 4) {
-            return 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';
+            return 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
         }
 
-        return 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
+        if (caps.memoryGB >= 2) {
+            return 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
+        }
+
+        return 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
     };
 
     const estimateTokens = (text: string): number => {

@@ -13,7 +13,7 @@ if (typeof window !== "undefined") {
     // Run: cp node_modules/onnxruntime-web/dist/ort-wasm* public/
     ort.env.wasm.wasmPaths = "/";
     ort.env.wasm.numThreads = 1;
-    ort.env.wasm.proxy = false;
+    ort.env.wasm.proxy = true;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -173,18 +173,61 @@ let recLoadPromise: Promise<ort.InferenceSession> | null = null;
 let detEPInfo: EPInfo | null = null;
 let recEPInfo: EPInfo | null = null;
 
+async function getModelBuffer(modelPath: string): Promise<ArrayBuffer | string> {
+    if (typeof window === 'undefined') return modelPath;
+    
+    // modelPath is usually something like "/models/det_10g.onnx"
+    const fileName = modelPath.split('/').pop() || "";
+    const baseUrl = process.env.NEXT_PUBLIC_VERCEL_BLOB_MODELS_URL?.replace(/\/+$/, "") || "";
+    const fullUrl = baseUrl ? `${baseUrl}/${fileName}` : modelPath;
+    
+    try {
+        if ('caches' in window) {
+            const cache = await caches.open('my-app-models');
+            
+            // Try matching by the file name so it works regardless of baseUrl changes
+            const cacheKeys = await cache.keys();
+            const cachedRequest = cacheKeys.find(req => req.url.endsWith(`/${fileName}`));
+            
+            if (cachedRequest) {
+                const cachedResponse = await cache.match(cachedRequest);
+                if (cachedResponse) {
+                    console.log(`[FaceService] Loaded ${fileName} from Cache API`);
+                    return await cachedResponse.arrayBuffer();
+                }
+            }
+
+            // Not in cache, fetch and store
+            console.log(`[FaceService] Downloading ${fileName} from ${fullUrl}...`);
+            const response = await fetch(fullUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const clonedResponse = response.clone();
+            await cache.put(fullUrl, clonedResponse);
+            return await response.arrayBuffer();
+        }
+    } catch (err) {
+        console.warn("[FaceService] Cache API failed or fetch failed, falling back to URL.", err);
+    }
+    
+    return fullUrl;
+}
+
 async function createSession(
     modelPath: string,
     options: { allowWebNN?: boolean; allowWebGPU?: boolean } = {},
 ): Promise<{ session: ort.InferenceSession; epInfo: EPInfo }> {
     const { allowWebNN = true, allowWebGPU = true } = options;
     const caps = await getEPCapabilities();
+    const modelSource = await getModelBuffer(modelPath);
 
     const tryCreate = async (
         ep: ort.InferenceSession.ExecutionProviderConfig,
     ): Promise<ort.InferenceSession> => {
         const epName = typeof ep === "string" ? ep : (ep as any).name;
-        return ort.InferenceSession.create(modelPath, {
+        return ort.InferenceSession.create(modelSource as any, {
             executionProviders: [ep],
             // "all" can fuse ops into kernels that have no WebGPU/WebNN shader —
             // the Identity canary passes but real Conv/Resize graphs fail silently.
