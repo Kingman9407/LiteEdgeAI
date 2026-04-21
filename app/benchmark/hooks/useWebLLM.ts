@@ -11,10 +11,32 @@ interface DeviceCapabilities {
 }
 
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+    // q4f16 variants (preferred — fast, smaller download)
     'Qwen2.5-0.5B-Instruct-q4f16_1-MLC': 4096,
     'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC': 2048,
     'Llama-3.2-1B-Instruct-q4f16_1-MLC': 4096,
+    // q4f32 fallback variants (slower, but compatible with more Vulkan drivers)
+    'Qwen2.5-0.5B-Instruct-q4f32_1-MLC': 4096,
+    'TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC': 2048,
+    'Llama-3.2-1B-Instruct-q4f32_1-MLC': 4096,
 };
+
+/** Returns the q4f32 fallback ID for a q4f16 model, or null if already q4f32. */
+function toQ4F32Fallback(modelId: string): string | null {
+    if (modelId.includes('q4f32')) return null; // already fallback
+    return modelId.replace('q4f16_1-MLC', 'q4f32_1-MLC');
+}
+
+/** True when the error looks like a Vulkan compute-pipeline compile failure. */
+function isVulkanPipelineError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return (
+        msg.includes('CreateComputePipelines') ||
+        msg.includes('VK_ERROR') ||
+        msg.includes('ComputePipeline') ||
+        msg.includes('pipeline')
+    );
+}
 
 const DEFAULT_CONTEXT_WINDOW = 4096;
 export const BENCHMARK_MAX_TOKENS = 3000;
@@ -104,40 +126,74 @@ export function useWebLLM() {
             }
 
             const selectedModel = modelId || recommendModel(caps);
-            setStatus(`🔄 Initializing WebLLM… (${caps.isUnifiedMemory ? 'Unified Memory' : 'Discrete GPU'})`);
-            setModelLoaded(false);
-
-            const engine = new webllm.MLCEngine();
-            engine.setInitProgressCallback((r) => setStatus(`📥 ${r.text}`));
-
-            const ctx = MODEL_CONTEXT_WINDOWS[selectedModel] ?? DEFAULT_CONTEXT_WINDOW;
-
-            // UMA devices get full context freely — no PCIe overhead
-            // Discrete GPUs / mobile get a sliding window to save VRAM.
-            // WebLLM requires exactly one of context_window_size / sliding_window_size
-            // to be positive; set the other to -1.
-            const engineConfig = caps.isUnifiedMemory
-                ? {
-                    context_window_size: ctx,
-                    sliding_window_size: -1,
-                }
-                : {
-                    context_window_size: -1,
-                    sliding_window_size: Math.floor(ctx / 2),
-                    attention_sink_size: 4,
-                };
-
-            await engine.reload(selectedModel, engineConfig);
-
-            engineRef.current = engine;
-            setContextWindowSize(ctx);
-            setModelLoaded(true);
-            setStatus(`✅ ${selectedModel} loaded! ctx=${ctx} | ${caps.isUnifiedMemory ? 'UMA mode' : 'Discrete GPU mode'}`);
+            await attemptLoad(selectedModel, caps);
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             setStatus(`❌ Error loading model: ${errorMessage}`);
             console.error('WebLLM loading error:', error);
         }
+    };
+
+    const attemptLoad = async (
+        selectedModel: string,
+        caps: DeviceCapabilities,
+        isFallback = false
+    ) => {
+        const tag = isFallback ? '🔁 Retrying with compatible variant' : '🔄 Initializing WebLLM';
+        setStatus(`${tag}… (${caps.isUnifiedMemory ? 'Unified Memory' : 'Discrete GPU'})`);
+        setModelLoaded(false);
+
+        const engine = new webllm.MLCEngine();
+        engine.setInitProgressCallback((r) => setStatus(`📥 ${r.text}`));
+
+        const ctx = MODEL_CONTEXT_WINDOWS[selectedModel] ?? DEFAULT_CONTEXT_WINDOW;
+
+        // UMA devices get full context freely — no PCIe overhead
+        // Discrete GPUs / mobile get a sliding window to save VRAM.
+        // WebLLM requires exactly one of context_window_size / sliding_window_size
+        // to be positive; set the other to -1.
+        const engineConfig = caps.isUnifiedMemory
+            ? {
+                context_window_size: ctx,
+                sliding_window_size: -1,
+            }
+            : {
+                context_window_size: -1,
+                sliding_window_size: Math.floor(ctx / 2),
+                attention_sink_size: 4,
+            };
+
+        try {
+            await engine.reload(selectedModel, engineConfig);
+        } catch (err) {
+            // Vulkan compute pipeline errors on mobile: auto-retry with q4f32 variant
+            if (isVulkanPipelineError(err) && !isFallback) {
+                const fallbackId = toQ4F32Fallback(selectedModel);
+                if (fallbackId) {
+                    console.warn('q4f16 pipeline failed, retrying with q4f32:', fallbackId);
+                    setStatus('⚠️ GPU shader issue detected — retrying with compatible version…');
+                    await engine.unload().catch(() => {});
+                    return attemptLoad(fallbackId, caps, true);
+                }
+            }
+            // Not a pipeline error, or already on fallback — surface to user
+            const msg = err instanceof Error ? err.message : String(err);
+            if (isVulkanPipelineError(err)) {
+                setStatus(
+                    '❌ Your GPU driver cannot compile the required shaders. ' +
+                    'Try updating your browser or use a desktop device.'
+                );
+            } else {
+                setStatus(`❌ Error loading model: ${msg}`);
+            }
+            console.error('WebLLM loading error:', err);
+            return;
+        }
+
+        engineRef.current = engine;
+        setContextWindowSize(ctx);
+        setModelLoaded(true);
+        setStatus(`✅ ${selectedModel} loaded! ctx=${ctx} | ${caps.isUnifiedMemory ? 'UMA mode' : 'Discrete GPU mode'}`);
     };
 
     const generate = async (
