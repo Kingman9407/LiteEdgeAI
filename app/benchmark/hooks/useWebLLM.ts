@@ -113,13 +113,16 @@ export function useWebLLM() {
             const ctx = MODEL_CONTEXT_WINDOWS[selectedModel] ?? DEFAULT_CONTEXT_WINDOW;
 
             // UMA devices get full context freely — no PCIe overhead
-            // Discrete GPUs get sliding window to reduce per-token PCIe transfers
+            // Discrete GPUs / mobile get a sliding window to save VRAM.
+            // WebLLM requires exactly one of context_window_size / sliding_window_size
+            // to be positive; set the other to -1.
             const engineConfig = caps.isUnifiedMemory
                 ? {
                     context_window_size: ctx,
+                    sliding_window_size: -1,
                 }
                 : {
-                    context_window_size: ctx,
+                    context_window_size: -1,
                     sliding_window_size: Math.floor(ctx / 2),
                     attention_sink_size: 4,
                 };
