@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useWebLLM } from '../hooks/useWebLLM';
+import { useInferisML } from '../hooks/useInferisML';
 import { useGPUInfo } from '../hooks/useGPUInfo';
 import { ModelSelector } from './ModelSelector';
 import { BenchmarkPanel } from './BenchmarkPanel';
@@ -35,8 +36,10 @@ export default function WebLLMBenchmark() {
     const [showGPU, setShowGPU] = useState(false);
     const [showSubmitPage, setShowSubmitPage] = useState(false);
     const [specs, setSpecs] = useState<PCSpecs | null>(null);
-    // ─── moved inside the component & renamed for clarity ───
     const [currentDifficulty, setCurrentDifficulty] = useState<string>('normal');
+
+    /** inferis-ml toggle */
+    const [useInferis, setUseInferis] = useState(false);
 
     const [benchmarkResults, setBenchmarkResults] = useState<{
         tokensPerSecond: number;
@@ -49,13 +52,18 @@ export default function WebLLMBenchmark() {
     const [rawBenchmarkRuns, setRawBenchmarkRuns] = useState<RawBenchmarkRun[]>([]);
     const [processedData, setProcessedData] = useState<ProcessedSession | null>(null);
 
+    // Both hooks always alive — we just pick which one to expose
+    const webLLM    = useWebLLM();
+    const inferisML = useInferisML();
+    const active    = useInferis ? inferisML : webLLM;
+
     const {
         modelLoaded,
         status,
         loadModel,
         unloadModel,
-        generateStreamBenchmark
-    } = useWebLLM();
+        generateStreamBenchmark,
+    } = active;
 
     const gpuInfo = useGPUInfo(true);
 
@@ -182,6 +190,8 @@ export default function WebLLMBenchmark() {
                         unloadModel={unloadModel}
                         modelLoaded={modelLoaded}
                         status={status}
+                        useInferis={useInferis}
+                        onToggleInferis={() => setUseInferis(v => !v)}
                     />
                 </div>
 

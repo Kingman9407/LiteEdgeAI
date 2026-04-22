@@ -1,11 +1,14 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useWebLLM } from '../../benchmark/hooks/useWebLLM';
+import { useWebLLM }    from '../../benchmark/hooks/useWebLLM';
+import { useInferisML } from '../../benchmark/hooks/useInferisML';
 
-const BRAND_GREEN = '#4fbf8a';
+const BRAND_GREEN  = '#4fbf8a';
 const BUTTON_GREEN = '#3fa77a';
 const BUTTON_HOVER = '#357a5a';
+const INFERIS_BLUE = '#5b8ef5';
+const INFERIS_DARK = '#3a6ad4';
 
 interface Message {
     id: string;
@@ -16,28 +19,28 @@ interface Message {
 }
 
 const MODELS = [
-    { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', name: 'Qwen 2.5 0.5B', tag: 'Lightest' },
-    { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', name: 'TinyLlama 1.1B', tag: 'Light' },
-    { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', name: 'Llama 3.2 1B', tag: 'Fast' },
+    { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',   name: 'Qwen 2.5 0.5B', tag: 'Lightest' },
+    { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', name: 'TinyLlama 1.1B', tag: 'Light'   },
+    { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',    name: 'Llama 3.2 1B',  tag: 'Fast'     },
 ];
 
 export default function ChatInterface() {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [input, setInput] = useState('');
-    const [model, setModel] = useState('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+    const [messages, setMessages]       = useState<Message[]>([]);
+    const [input, setInput]             = useState('');
+    const [model, setModel]             = useState('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
     const [isGenerating, setIsGenerating] = useState(false);
     const [showModelPicker, setShowModelPicker] = useState(false);
+    const [useInferis, setUseInferis]   = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const abortRef = useRef(false);
+    const textareaRef    = useRef<HTMLTextAreaElement>(null);
+    const abortRef       = useRef(false);
 
-    const {
-        modelLoaded,
-        status,
-        loadModel,
-        unloadModel,
-        generateStream,
-    } = useWebLLM();
+    // Both hooks always live — pick active by toggle
+    const webLLM    = useWebLLM();
+    const inferisML = useInferisML();
+    const active    = useInferis ? inferisML : webLLM;
+
+    const { modelLoaded, status, loadModel, unloadModel, generateStream } = active;
 
     // Auto-scroll
     useEffect(() => {
@@ -184,6 +187,56 @@ export default function ChatInterface() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+
+                    {/* ── inferis-ml pill toggle ── */}
+                    <button
+                        id="inferis-chat-toggle-btn"
+                        onClick={() => { if (!modelLoaded) setUseInferis(v => !v); }}
+                        title={modelLoaded ? 'Unload model first' : (useInferis ? 'Disable inferis-ml' : 'Enable inferis-ml worker pool')}
+                        style={{
+                            position:        'relative',
+                            display:         'flex',
+                            alignItems:      'center',
+                            gap:             '6px',
+                            padding:         '5px 10px 5px 6px',
+                            borderRadius:    '999px',
+                            border:          `1px solid ${useInferis ? INFERIS_BLUE + '88' : '#34363c'}`,
+                            backgroundColor: useInferis ? `${INFERIS_BLUE}18` : '#18191c',
+                            cursor:          modelLoaded ? 'not-allowed' : 'pointer',
+                            opacity:         modelLoaded ? 0.5 : 1,
+                            transition:      'all 0.22s',
+                        }}
+                    >
+                        {/* tiny pill slider */}
+                        <span
+                            style={{
+                                position:        'relative',
+                                display:         'inline-block',
+                                width:           '32px',
+                                height:          '18px',
+                                borderRadius:    '999px',
+                                backgroundColor: useInferis ? INFERIS_BLUE : '#34363c',
+                                transition:      'background 0.22s',
+                                flexShrink:      0,
+                            }}
+                        >
+                            <span style={{
+                                position:        'absolute',
+                                top:             '2px',
+                                left:            useInferis ? '14px' : '2px',
+                                width:           '14px',
+                                height:          '14px',
+                                borderRadius:    '50%',
+                                backgroundColor: '#fff',
+                                boxShadow:       '0 1px 3px rgba(0,0,0,0.4)',
+                                transition:      'left 0.22s',
+                            }} />
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: useInferis ? INFERIS_BLUE : '#7a7d85', fontWeight: 600 }}>
+                            ⚡ inferis-ml
+                        </span>
+                    </button>
+
                     {/* Model picker */}
                     <div style={{ position: 'relative' }}>
                         <button
@@ -270,35 +323,35 @@ export default function ChatInterface() {
                             id="load-model-btn"
                             onClick={() => loadModel(model)}
                             style={{
-                                padding: '6px 14px',
-                                borderRadius: '8px',
-                                backgroundColor: BUTTON_GREEN,
-                                border: 'none',
-                                color: '#fff',
-                                fontSize: '0.8rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'background 0.2s',
+                                padding:         '6px 14px',
+                                borderRadius:    '8px',
+                                backgroundColor: useInferis ? INFERIS_BLUE : BUTTON_GREEN,
+                                border:          'none',
+                                color:           '#fff',
+                                fontSize:        '0.8rem',
+                                fontWeight:      600,
+                                cursor:          'pointer',
+                                transition:      'background 0.2s',
                             }}
-                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = BUTTON_HOVER)}
-                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = BUTTON_GREEN)}
+                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = useInferis ? INFERIS_DARK : BUTTON_HOVER)}
+                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = useInferis ? INFERIS_BLUE : BUTTON_GREEN)}
                         >
-                            Load Model
+                            {useInferis ? '⚡ Load (inferis-ml)' : 'Load Model'}
                         </button>
                     ) : (
                         <button
                             id="unload-model-btn"
                             onClick={unloadModel}
                             style={{
-                                padding: '6px 14px',
-                                borderRadius: '8px',
+                                padding:         '6px 14px',
+                                borderRadius:    '8px',
                                 backgroundColor: '#5f2a2a',
-                                border: 'none',
-                                color: '#f2f3f5',
-                                fontSize: '0.8rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'background 0.2s',
+                                border:          'none',
+                                color:           '#f2f3f5',
+                                fontSize:        '0.8rem',
+                                fontWeight:      600,
+                                cursor:          'pointer',
+                                transition:      'background 0.2s',
                             }}
                             onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#7a3535')}
                             onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#5f2a2a')}
