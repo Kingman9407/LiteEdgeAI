@@ -29,7 +29,26 @@ await build({
         'process.env.NODE_ENV': '"production"',
     },
 }).then(() => {
-    console.log('✅  public/inferis-worker.js built successfully');
+    // Post-processing to suppress WebGPU limits warnings from tvmjs/web-llm
+    import('fs').then((fs) => {
+        const workerFile = resolve(__dirname, '../public/inferis-worker.js');
+        let content = fs.readFileSync(workerFile, 'utf8');
+        
+        // Suppress maxStorageBufferBindingSize warning
+        content = content.replace(
+            /console\.log\(`Requested maxStorageBufferBindingSize exceeds limit\.[\s\S]*?`\);/g,
+            '/* maxStorageBufferBindingSize warning suppressed */'
+        );
+        
+        // Suppress maxBufferSize warning
+        content = content.replace(
+            /console\.log\(`Requested maxBufferSize exceeds limit\.[\s\S]*?`\);/g,
+            '/* maxBufferSize warning suppressed */'
+        );
+
+        fs.writeFileSync(workerFile, content);
+        console.log('✅  public/inferis-worker.js built successfully and warnings suppressed');
+    });
 }).catch((err) => {
     console.error('❌  Worker bundle failed:', err.message);
     process.exit(1);
