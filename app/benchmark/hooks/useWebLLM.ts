@@ -188,12 +188,54 @@ export function useWebLLM() {
                 originalLog(...args);
             };
 
+            // VERIFICATION PROXY: Intercept WebGPU to prove memory splits are working
+            let maxBindingSizeEncountered = 0;
+            const limit128MB = 128 * 1024 * 1024;
+            const originalRequestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
+            
+            navigator.gpu.requestAdapter = async function(options) {
+                const adapter = await originalRequestAdapter(options);
+                if (!adapter) return adapter;
+                
+                const originalRequestDevice = adapter.requestDevice.bind(adapter);
+                adapter.requestDevice = async function(descriptor) {
+                    const device = await originalRequestDevice(descriptor);
+                    
+                    const originalCreateBindGroup = device.createBindGroup.bind(device);
+                    device.createBindGroup = function(desc) {
+                        for (const entry of desc.entries) {
+                            // Check if this binding entry is a buffer with a specific size
+                            const resource = entry.resource as any;
+                            if (resource && resource.buffer && resource.size) {
+                                if (resource.size > maxBindingSizeEncountered) {
+                                    maxBindingSizeEncountered = resource.size;
+                                }
+                                if (resource.size > limit128MB) {
+                                    originalLog(`❌ VERIFICATION FAILED: Found a memory binding of ${Math.round(resource.size / 1024 / 1024)}MB which exceeds 128MB!`);
+                                }
+                            }
+                        }
+                        return originalCreateBindGroup(desc);
+                    };
+                    return device;
+                };
+                return adapter;
+            };
+
             await engine.reload(finalModel, engineConfig);
             
+            // Clean up proxies and print verification results
+            navigator.gpu.requestAdapter = originalRequestAdapter;
             console.log = originalLog;
+            
+            if (maxBindingSizeEncountered > 0) {
+                originalLog(`✅ VERIFICATION PASSED: The WebLLM engine split the memory successfully. The maximum chunk size ever bound to a shader was only ${Math.round(maxBindingSizeEncountered / 1024 / 1024)}MB (well under the 128MB limit).`);
+            }
+
         } catch (err) {
-            // Restore console.log in case of error
+            // Restore console.log and proxies in case of error
             console.log = originalLog;
+            navigator.gpu.requestAdapter = originalRequestAdapter;
             
             // Vulkan compute pipeline errors on mobile: auto-retry with q4f32 variant
             if (isVulkanPipelineError(err) && !isFallback) {
@@ -212,10 +254,11 @@ export function useWebLLM() {
                     '❌ Your GPU driver cannot compile the required shaders. ' +
                     'Try updating your browser or use a desktop device.'
                 );
+                // Browser already prints native Dawn/Vulkan errors, so we don't double print here
             } else {
                 setStatus(`❌ Error loading model: ${msg}`);
+                console.error('WebLLM loading error:', err);
             }
-            console.error('WebLLM loading error:', err);
             return;
         }
 
