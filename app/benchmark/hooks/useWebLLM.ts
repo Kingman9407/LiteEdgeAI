@@ -8,6 +8,7 @@ interface DeviceCapabilities {
     memoryGB: number;
     isMobile: boolean;
     isUnifiedMemory?: boolean;
+    hasShaderF16: boolean;
 }
 
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
@@ -65,6 +66,8 @@ export function useWebLLM() {
             return null;
         }
 
+        const hasShaderF16 = adapter.features.has('shader-f16');
+
         const memoryGB = (navigator as any).deviceMemory || 4;
 
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
@@ -82,6 +85,7 @@ export function useWebLLM() {
             memoryGB,
             isMobile,
             isUnifiedMemory,
+            hasShaderF16,
         };
 
         setCapabilities(caps);
@@ -89,15 +93,20 @@ export function useWebLLM() {
     };
 
     const recommendModel = (caps: DeviceCapabilities): string => {
+        let modelId = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+        
         if (caps.memoryGB >= 4) {
-            return 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+            modelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+        } else if (caps.memoryGB >= 2) {
+            modelId = 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
         }
 
-        if (caps.memoryGB >= 2) {
-            return 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
+        // Proactively fallback to q4f32 if shader-f16 is missing to avoid pipeline crashes
+        if (!caps.hasShaderF16) {
+            return toQ4F32Fallback(modelId) || modelId;
         }
 
-        return 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+        return modelId;
     };
 
     const estimateTokens = (text: string): number => {
@@ -139,6 +148,13 @@ export function useWebLLM() {
         caps: DeviceCapabilities,
         isFallback = false
     ) => {
+        // If the device doesn't support f16, preemptively swap to f32 to avoid crashing entirely
+        let finalModel = selectedModel;
+        if (!caps.hasShaderF16 && finalModel.includes('q4f16') && !isFallback) {
+            console.log('GPU lacks shader-f16 feature; proactively swapping to q4f32 variant.');
+            finalModel = toQ4F32Fallback(finalModel) || finalModel;
+        }
+
         const tag = isFallback ? '🔁 Retrying with compatible variant' : '🔄 Initializing WebLLM';
         setStatus(`${tag}… (${caps.isUnifiedMemory ? 'Unified Memory' : 'Discrete GPU'})`);
         setModelLoaded(false);
@@ -163,12 +179,25 @@ export function useWebLLM() {
                 attention_sink_size: 4,
             };
 
+        // Temporarily suppress the annoying maxStorageBufferBindingSize console warning
+        const originalLog = console.log;
+        
         try {
-            await engine.reload(selectedModel, engineConfig);
+            console.log = (...args) => {
+                if (typeof args[0] === 'string' && args[0].includes('Requested maxStorageBufferBindingSize exceeds limit')) return;
+                originalLog(...args);
+            };
+
+            await engine.reload(finalModel, engineConfig);
+            
+            console.log = originalLog;
         } catch (err) {
+            // Restore console.log in case of error
+            console.log = originalLog;
+            
             // Vulkan compute pipeline errors on mobile: auto-retry with q4f32 variant
             if (isVulkanPipelineError(err) && !isFallback) {
-                const fallbackId = toQ4F32Fallback(selectedModel);
+                const fallbackId = toQ4F32Fallback(finalModel);
                 if (fallbackId) {
                     console.warn('q4f16 pipeline failed, retrying with q4f32:', fallbackId);
                     setStatus('⚠️ GPU shader issue detected — retrying with compatible version…');
