@@ -188,6 +188,7 @@ export function useWebLLM() {
 
         // Temporarily suppress the annoying maxStorageBufferBindingSize console warning
         const originalLog = console.log;
+        const originalRequestAdapter = navigator.gpu?.requestAdapter?.bind(navigator.gpu);
 
         try {
             console.log = (...args) => {
@@ -198,8 +199,8 @@ export function useWebLLM() {
             // VERIFICATION PROXY: Intercept WebGPU to prove memory splits are working
             let maxBindingSizeEncountered = 0;
             const limit128MB = 128 * 1024 * 1024;
-            const originalRequestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
 
+            if (navigator.gpu && originalRequestAdapter) {
             navigator.gpu.requestAdapter = async function (options?: any) {
                 const adapter = await originalRequestAdapter(options);
                 if (!adapter) return adapter;
@@ -228,11 +229,14 @@ export function useWebLLM() {
                 };
                 return adapter;
             };
+            }
 
             await engine.reload(finalModel, engineConfig);
 
             // Clean up proxies and print verification results
-            navigator.gpu.requestAdapter = originalRequestAdapter;
+            if (navigator.gpu && originalRequestAdapter) {
+                navigator.gpu.requestAdapter = originalRequestAdapter;
+            }
             console.log = originalLog;
 
             if (maxBindingSizeEncountered > 0) {
@@ -242,7 +246,9 @@ export function useWebLLM() {
         } catch (err) {
             // Restore console.log and proxies in case of error
             console.log = originalLog;
-            navigator.gpu.requestAdapter = originalRequestAdapter;
+            if (navigator.gpu && originalRequestAdapter) {
+                navigator.gpu.requestAdapter = originalRequestAdapter;
+            }
 
             // Vulkan compute pipeline errors on mobile: auto-retry with f32 variant
             if (isVulkanPipelineError(err) && !isFallback) {
