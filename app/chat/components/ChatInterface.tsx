@@ -58,10 +58,14 @@ export default function ChatInterface() {
         ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
     }, [input]);
 
-    // Auto WASM CPU Fallback if WebGPU is unsupported
+    // Auto WASM CPU Fallback if WebGPU is unsupported or on mobile/Android
     useEffect(() => {
-        if (typeof navigator !== 'undefined' && !navigator.gpu) {
-            console.log('WebGPU is unsupported. Auto-switching chat to inferis-ml worker pool with WASM fallback.');
+        const noWebGPU = typeof navigator === 'undefined' || !navigator.gpu;
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (noWebGPU || isAndroid || isMobile) {
+            console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
             setUseInferis(true);
             setModel('SmolLM2-135M-Instruct-q0f16-MLC');
         }

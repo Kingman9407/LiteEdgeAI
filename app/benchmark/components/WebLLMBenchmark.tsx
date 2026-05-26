@@ -75,8 +75,12 @@ export default function WebLLMBenchmark() {
             screen: `${window.screen.width} × ${window.screen.height}`,
         });
 
-        if (typeof navigator !== 'undefined' && !navigator.gpu) {
-            console.log('WebGPU is unsupported. Auto-switching to inferis-ml worker pool with WASM fallback.');
+        const noWebGPU = typeof navigator === 'undefined' || !navigator.gpu;
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (noWebGPU || isAndroid || isMobile) {
+            console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
             setUseInferis(true);
             setModel('SmolLM2-135M-Instruct-q0f16-MLC');
         }
