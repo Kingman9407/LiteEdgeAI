@@ -20,10 +20,13 @@ interface ModelSelectorProps {
 }
 
 const MODELS = [
+    { id: 'SmolLM2-135M-Instruct-q0f16-MLC',      name: 'SmolLM2 135M (Ultra Light)' },
     { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',    name: 'Qwen 2.5 0.5B (Lightest)' },
     { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC',  name: 'TinyLlama 1.1B (Light)'   },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',     name: 'Llama 3.2 1B (Fastest)'   },
 ];
+
+const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
 
 export function ModelSelector({
     selectedModel,
@@ -56,7 +59,9 @@ export function ModelSelector({
                         ⚡ inferis-ml Worker Pool
                     </span>
                     <span style={{ fontSize: '0.68rem', color: '#555' }}>
-                        {useInferis
+                        {!hasWebGPU
+                            ? '⚠️ WebGPU unsupported — Locked to WASM CPU Fallback mode'
+                            : useInferis
                             ? 'Enabled — cross-tab dedup, streaming, auto WebGPU/WASM'
                             : 'Off — using direct @mlc-ai/web-llm engine'}
                     </span>
@@ -65,8 +70,16 @@ export function ModelSelector({
                 {/* pill toggle */}
                 <button
                     id="inferis-toggle-btn"
-                    onClick={() => { if (!modelLoaded) onToggleInferis(); }}
-                    title={modelLoaded ? 'Unload model before toggling' : (useInferis ? 'Disable inferis-ml' : 'Enable inferis-ml')}
+                    onClick={() => { if (!modelLoaded && hasWebGPU) onToggleInferis(); }}
+                    title={
+                        !hasWebGPU
+                            ? 'WebGPU not supported — locked to worker pool'
+                            : modelLoaded
+                            ? 'Unload model before toggling'
+                            : useInferis
+                            ? 'Disable inferis-ml'
+                            : 'Enable inferis-ml'
+                    }
                     style={{
                         position:        'relative',
                         width:           '46px',
@@ -74,8 +87,8 @@ export function ModelSelector({
                         borderRadius:    '999px',
                         border:          'none',
                         backgroundColor: useInferis ? INFERIS_BLUE : '#34363c',
-                        cursor:          modelLoaded ? 'not-allowed' : 'pointer',
-                        opacity:         modelLoaded ? 0.5 : 1,
+                        cursor:          (modelLoaded || !hasWebGPU) ? 'not-allowed' : 'pointer',
+                        opacity:         (modelLoaded || !hasWebGPU) ? 0.5 : 1,
                         transition:      'background 0.22s',
                         flexShrink:      0,
                         padding:         0,

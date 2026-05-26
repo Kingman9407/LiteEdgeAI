@@ -67,7 +67,8 @@ export function useInferisML() {
 
             setContextWindowSize(DEFAULT_CONTEXT_WINDOW);
             setModelLoaded(true);
-            setStatus(`✅ [inferis-ml] ${selectedModel} ready — worker pool active`);
+            const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
+            setStatus(`✅ [inferis-ml] ${selectedModel} ready — worker pool active (${hasWebGPU ? 'WebGPU' : 'WASM CPU Fallback'})`);
 
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);

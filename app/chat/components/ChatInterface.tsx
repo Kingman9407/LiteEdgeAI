@@ -19,10 +19,13 @@ interface Message {
 }
 
 const MODELS = [
+    { id: 'SmolLM2-135M-Instruct-q0f16-MLC',   name: 'SmolLM2 135M',  tag: 'Ultra Light' },
     { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',   name: 'Qwen 2.5 0.5B', tag: 'Lightest' },
     { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', name: 'TinyLlama 1.1B', tag: 'Light'   },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',    name: 'Llama 3.2 1B',  tag: 'Fast'     },
 ];
+
+const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
 
 export default function ChatInterface() {
     const [messages, setMessages]       = useState<Message[]>([]);
@@ -54,6 +57,15 @@ export default function ChatInterface() {
         ta.style.height = 'auto';
         ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
     }, [input]);
+
+    // Auto WASM CPU Fallback if WebGPU is unsupported
+    useEffect(() => {
+        if (typeof navigator !== 'undefined' && !navigator.gpu) {
+            console.log('WebGPU is unsupported. Auto-switching chat to inferis-ml worker pool with WASM fallback.');
+            setUseInferis(true);
+            setModel('SmolLM2-135M-Instruct-q0f16-MLC');
+        }
+    }, []);
 
     const sendMessage = useCallback(async () => {
         const text = input.trim();
@@ -191,8 +203,16 @@ export default function ChatInterface() {
                     {/* ── inferis-ml pill toggle ── */}
                     <button
                         id="inferis-chat-toggle-btn"
-                        onClick={() => { if (!modelLoaded) setUseInferis(v => !v); }}
-                        title={modelLoaded ? 'Unload model first' : (useInferis ? 'Disable inferis-ml' : 'Enable inferis-ml worker pool')}
+                        onClick={() => { if (!modelLoaded && hasWebGPU) setUseInferis(v => !v); }}
+                        title={
+                            !hasWebGPU
+                                ? 'WebGPU not supported — locked to WASM CPU Fallback mode'
+                                : modelLoaded
+                                ? 'Unload model first'
+                                : useInferis
+                                ? 'Disable inferis-ml'
+                                : 'Enable inferis-ml worker pool'
+                        }
                         style={{
                             position:        'relative',
                             display:         'flex',
@@ -202,8 +222,8 @@ export default function ChatInterface() {
                             borderRadius:    '999px',
                             border:          `1px solid ${useInferis ? INFERIS_BLUE + '88' : '#34363c'}`,
                             backgroundColor: useInferis ? `${INFERIS_BLUE}18` : '#18191c',
-                            cursor:          modelLoaded ? 'not-allowed' : 'pointer',
-                            opacity:         modelLoaded ? 0.5 : 1,
+                            cursor:          (modelLoaded || !hasWebGPU) ? 'not-allowed' : 'pointer',
+                            opacity:         (modelLoaded || !hasWebGPU) ? 0.5 : 1,
                             transition:      'all 0.22s',
                         }}
                     >
@@ -233,7 +253,7 @@ export default function ChatInterface() {
                             }} />
                         </span>
                         <span style={{ fontSize: '0.72rem', color: useInferis ? INFERIS_BLUE : '#7a7d85', fontWeight: 600 }}>
-                            ⚡ inferis-ml
+                            {!hasWebGPU ? '⚠️ WASM Fallback' : '⚡ inferis-ml'}
                         </span>
                     </button>
 

@@ -74,6 +74,12 @@ export default function WebLLMBenchmark() {
             os: navigator.platform,
             screen: `${window.screen.width} × ${window.screen.height}`,
         });
+
+        if (typeof navigator !== 'undefined' && !navigator.gpu) {
+            console.log('WebGPU is unsupported. Auto-switching to inferis-ml worker pool with WASM fallback.');
+            setUseInferis(true);
+            setModel('SmolLM2-135M-Instruct-q0f16-MLC');
+        }
     }, []);
 
     const handleBenchmarkComplete = (results: {

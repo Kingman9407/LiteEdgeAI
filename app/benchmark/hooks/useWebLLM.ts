@@ -12,19 +12,24 @@ interface DeviceCapabilities {
 }
 
 const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-    // q4f16 variants (preferred — fast, smaller download)
+    // q4f16 / q0f16 variants (preferred — fast, smaller download)
+    'SmolLM2-135M-Instruct-q0f16-MLC': 4096,
     'Qwen2.5-0.5B-Instruct-q4f16_1-MLC': 4096,
     'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC': 2048,
     'Llama-3.2-1B-Instruct-q4f16_1-MLC': 4096,
-    // q4f32 fallback variants (slower, but compatible with more Vulkan drivers)
+    // q4f32 / q0f32 fallback variants (slower, but compatible with more Vulkan drivers)
+    'SmolLM2-135M-Instruct-q0f32-MLC': 4096,
     'Qwen2.5-0.5B-Instruct-q4f32_1-MLC': 4096,
     'TinyLlama-1.1B-Chat-v1.0-q4f32_1-MLC': 2048,
     'Llama-3.2-1B-Instruct-q4f32_1-MLC': 4096,
 };
 
-/** Returns the q4f32 fallback ID for a q4f16 model, or null if already q4f32. */
+/** Returns the q4f32/q0f32 fallback ID for a q4f16/q0f16 model, or null if already f32. */
 function toQ4F32Fallback(modelId: string): string | null {
-    if (modelId.includes('q4f32')) return null; // already fallback
+    if (modelId.includes('q4f32') || modelId.includes('q0f32')) return null; // already fallback
+    if (modelId.includes('q0f16')) {
+        return modelId.replace('q0f16', 'q0f32');
+    }
     return modelId.replace('q4f16_1-MLC', 'q4f32_1-MLC');
 }
 
@@ -93,15 +98,17 @@ export function useWebLLM() {
     };
 
     const recommendModel = (caps: DeviceCapabilities): string => {
-        let modelId = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
-        
+        let modelId = 'SmolLM2-135M-Instruct-q0f16-MLC';
+
         if (caps.memoryGB >= 4) {
             modelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
         } else if (caps.memoryGB >= 2) {
             modelId = 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
+        } else if (caps.memoryGB >= 1) {
+            modelId = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
         }
 
-        // Proactively fallback to q4f32 if shader-f16 is missing to avoid pipeline crashes
+        // Proactively fallback to f32 if shader-f16 is missing to avoid pipeline crashes
         if (!caps.hasShaderF16) {
             return toQ4F32Fallback(modelId) || modelId;
         }
@@ -150,8 +157,8 @@ export function useWebLLM() {
     ) => {
         // If the device doesn't support f16, preemptively swap to f32 to avoid crashing entirely
         let finalModel = selectedModel;
-        if (!caps.hasShaderF16 && finalModel.includes('q4f16') && !isFallback) {
-            console.log('GPU lacks shader-f16 feature; proactively swapping to q4f32 variant.');
+        if (!caps.hasShaderF16 && (finalModel.includes('q4f16') || finalModel.includes('q0f16')) && !isFallback) {
+            console.log('GPU lacks shader-f16 feature; proactively swapping to f32 variant.');
             finalModel = toQ4F32Fallback(finalModel) || finalModel;
         }
 
@@ -181,7 +188,7 @@ export function useWebLLM() {
 
         // Temporarily suppress the annoying maxStorageBufferBindingSize console warning
         const originalLog = console.log;
-        
+
         try {
             console.log = (...args) => {
                 if (typeof args[0] === 'string' && args[0].includes('Requested maxStorageBufferBindingSize exceeds limit')) return;
@@ -192,17 +199,17 @@ export function useWebLLM() {
             let maxBindingSizeEncountered = 0;
             const limit128MB = 128 * 1024 * 1024;
             const originalRequestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
-            
-            navigator.gpu.requestAdapter = async function(options) {
+
+            navigator.gpu.requestAdapter = async function (options) {
                 const adapter = await originalRequestAdapter(options);
                 if (!adapter) return adapter;
-                
+
                 const originalRequestDevice = adapter.requestDevice.bind(adapter);
-                adapter.requestDevice = async function(descriptor) {
+                adapter.requestDevice = async function (descriptor) {
                     const device = await originalRequestDevice(descriptor);
-                    
+
                     const originalCreateBindGroup = device.createBindGroup.bind(device);
-                    device.createBindGroup = function(desc) {
+                    device.createBindGroup = function (desc) {
                         for (const entry of desc.entries) {
                             // Check if this binding entry is a buffer with a specific size
                             const resource = entry.resource as any;
@@ -223,11 +230,11 @@ export function useWebLLM() {
             };
 
             await engine.reload(finalModel, engineConfig);
-            
+
             // Clean up proxies and print verification results
             navigator.gpu.requestAdapter = originalRequestAdapter;
             console.log = originalLog;
-            
+
             if (maxBindingSizeEncountered > 0) {
                 originalLog(`✅ VERIFICATION PASSED: The WebLLM engine split the memory successfully. The maximum chunk size ever bound to a shader was only ${Math.round(maxBindingSizeEncountered / 1024 / 1024)}MB (well under the 128MB limit).`);
             }
@@ -236,14 +243,14 @@ export function useWebLLM() {
             // Restore console.log and proxies in case of error
             console.log = originalLog;
             navigator.gpu.requestAdapter = originalRequestAdapter;
-            
-            // Vulkan compute pipeline errors on mobile: auto-retry with q4f32 variant
+
+            // Vulkan compute pipeline errors on mobile: auto-retry with f32 variant
             if (isVulkanPipelineError(err) && !isFallback) {
                 const fallbackId = toQ4F32Fallback(finalModel);
                 if (fallbackId) {
-                    console.warn('q4f16 pipeline failed, retrying with q4f32:', fallbackId);
+                    console.warn('f16 pipeline failed, retrying with f32 variant:', fallbackId);
                     setStatus('⚠️ GPU shader issue detected — retrying with compatible version…');
-                    await engine.unload().catch(() => {});
+                    await engine.unload().catch(() => { });
                     return attemptLoad(fallbackId, caps, true);
                 }
             }
