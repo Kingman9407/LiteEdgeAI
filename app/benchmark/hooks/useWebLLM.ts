@@ -205,11 +205,11 @@ export function useWebLLM() {
                 if (!adapter) return adapter;
 
                 const originalRequestDevice = adapter.requestDevice.bind(adapter);
-                adapter.requestDevice = async function (descriptor) {
+                adapter.requestDevice = async function (descriptor?: any) {
                     const device = await originalRequestDevice(descriptor);
 
                     const originalCreateBindGroup = device.createBindGroup.bind(device);
-                    device.createBindGroup = function (desc) {
+                    device.createBindGroup = function (desc: any) {
                         for (const entry of desc.entries) {
                             // Check if this binding entry is a buffer with a specific size
                             const resource = entry.resource as any;
