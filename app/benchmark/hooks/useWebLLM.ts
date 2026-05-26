@@ -200,7 +200,7 @@ export function useWebLLM() {
             const limit128MB = 128 * 1024 * 1024;
             const originalRequestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
 
-            navigator.gpu.requestAdapter = async function (options) {
+            navigator.gpu.requestAdapter = async function (options?: any) {
                 const adapter = await originalRequestAdapter(options);
                 if (!adapter) return adapter;
 
