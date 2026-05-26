@@ -3,12 +3,15 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useWebLLM }    from '../../benchmark/hooks/useWebLLM';
 import { useInferisML } from '../../benchmark/hooks/useInferisML';
+import { useONNXWeb }   from '../../benchmark/hooks/useONNXWeb';
 
 const BRAND_GREEN  = '#4fbf8a';
 const BUTTON_GREEN = '#3fa77a';
 const BUTTON_HOVER = '#357a5a';
 const INFERIS_BLUE = '#5b8ef5';
 const INFERIS_DARK = '#3a6ad4';
+const ONNX_PURPLE  = '#a855f7';
+const ONNX_DARK    = '#7e22ce';
 
 interface Message {
     id: string;
@@ -25,23 +28,28 @@ const MODELS = [
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',    name: 'Llama 3.2 1B',  tag: 'Fast'     },
 ];
 
+const ONNX_MODELS = [
+    { id: 'onnx-community/SmolLM2-135M-Instruct', name: 'SmolLM2 135M (ONNX)', tag: 'WebGPU/WASM' }
+];
+
 const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
 
 export default function ChatInterface() {
     const [messages, setMessages]       = useState<Message[]>([]);
     const [input, setInput]             = useState('');
+    const [backend, setBackend]         = useState<'webllm' | 'inferis' | 'onnx'>('webllm');
     const [model, setModel]             = useState('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
     const [isGenerating, setIsGenerating] = useState(false);
     const [showModelPicker, setShowModelPicker] = useState(false);
-    const [useInferis, setUseInferis]   = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef    = useRef<HTMLTextAreaElement>(null);
     const abortRef       = useRef(false);
 
-    // Both hooks always live — pick active by toggle
+    // Three hooks always alive — pick active
     const webLLM    = useWebLLM();
     const inferisML = useInferisML();
-    const active    = useInferis ? inferisML : webLLM;
+    const onnxWeb   = useONNXWeb();
+    const active    = backend === 'onnx' ? onnxWeb : backend === 'inferis' ? inferisML : webLLM;
 
     const { modelLoaded, status, loadModel, unloadModel, generateStream } = active;
 
@@ -66,8 +74,8 @@ export default function ChatInterface() {
 
         if (noWebGPU || isAndroid || isMobile) {
             console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
-            setUseInferis(true);
-            setModel('SmolLM2-135M-Instruct-q0f16-MLC');
+            setBackend('onnx');
+            setModel('onnx-community/SmolLM2-135M-Instruct');
         }
     }, []);
 
@@ -145,7 +153,8 @@ export default function ChatInterface() {
         abortRef.current = true;
     };
 
-    const selectedModelInfo = MODELS.find(m => m.id === model);
+    const currentModelsList = backend === 'onnx' ? ONNX_MODELS : MODELS;
+    const selectedModelInfo = currentModelsList.find(m => m.id === model);
 
     return (
         <div
@@ -204,62 +213,53 @@ export default function ChatInterface() {
 
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
 
-                    {/* ── inferis-ml pill toggle ── */}
-                    <button
-                        id="inferis-chat-toggle-btn"
-                        onClick={() => { if (!modelLoaded && hasWebGPU) setUseInferis(v => !v); }}
-                        title={
-                            !hasWebGPU
-                                ? 'WebGPU not supported — locked to WASM CPU Fallback mode'
-                                : modelLoaded
-                                ? 'Unload model first'
-                                : useInferis
-                                ? 'Disable inferis-ml'
-                                : 'Enable inferis-ml worker pool'
-                        }
+                    {/* ── Segmented execution backend bar ── */}
+                    <div
                         style={{
-                            position:        'relative',
-                            display:         'flex',
-                            alignItems:      'center',
-                            gap:             '6px',
-                            padding:         '5px 10px 5px 6px',
-                            borderRadius:    '999px',
-                            border:          `1px solid ${useInferis ? INFERIS_BLUE + '88' : '#34363c'}`,
-                            backgroundColor: useInferis ? `${INFERIS_BLUE}18` : '#18191c',
-                            cursor:          (modelLoaded || !hasWebGPU) ? 'not-allowed' : 'pointer',
-                            opacity:         (modelLoaded || !hasWebGPU) ? 0.5 : 1,
-                            transition:      'all 0.22s',
+                            display: 'flex',
+                            gap: '4px',
+                            padding: '3px',
+                            backgroundColor: '#18191c',
+                            border: '1px solid #2a2c31',
+                            borderRadius: '20px',
                         }}
                     >
-                        {/* tiny pill slider */}
-                        <span
-                            style={{
-                                position:        'relative',
-                                display:         'inline-block',
-                                width:           '32px',
-                                height:          '18px',
-                                borderRadius:    '999px',
-                                backgroundColor: useInferis ? INFERIS_BLUE : '#34363c',
-                                transition:      'background 0.22s',
-                                flexShrink:      0,
-                            }}
-                        >
-                            <span style={{
-                                position:        'absolute',
-                                top:             '2px',
-                                left:            useInferis ? '14px' : '2px',
-                                width:           '14px',
-                                height:          '14px',
-                                borderRadius:    '50%',
-                                backgroundColor: '#fff',
-                                boxShadow:       '0 1px 3px rgba(0,0,0,0.4)',
-                                transition:      'left 0.22s',
-                            }} />
-                        </span>
-                        <span style={{ fontSize: '0.72rem', color: useInferis ? INFERIS_BLUE : '#7a7d85', fontWeight: 600 }}>
-                            {!hasWebGPU ? '⚠️ WASM Fallback' : '⚡ inferis-ml'}
-                        </span>
-                    </button>
+                        {[
+                            { key: 'webllm', label: 'WebLLM', color: BRAND_GREEN },
+                            { key: 'inferis', label: 'inferis-ml', color: INFERIS_BLUE },
+                            { key: 'onnx', label: 'ONNX Web', color: ONNX_PURPLE },
+                        ].map((btn) => {
+                            const activeBtn = backend === btn.key;
+                            return (
+                                <button
+                                    key={btn.key}
+                                    disabled={modelLoaded}
+                                    onClick={() => {
+                                        setBackend(btn.key as any);
+                                        if (btn.key === 'onnx') {
+                                            setModel('onnx-community/SmolLM2-135M-Instruct');
+                                        } else {
+                                            setModel('SmolLM2-135M-Instruct-q0f16-MLC');
+                                        }
+                                    }}
+                                    style={{
+                                        border: 'none',
+                                        borderRadius: '16px',
+                                        backgroundColor: activeBtn ? btn.color : 'transparent',
+                                        color: activeBtn ? '#fff' : '#8e9297',
+                                        fontSize: '0.7rem',
+                                        fontWeight: 600,
+                                        padding: '4px 10px',
+                                        cursor: modelLoaded ? 'not-allowed' : 'pointer',
+                                        opacity: modelLoaded && !activeBtn ? 0.3 : 1,
+                                        transition: 'all 0.22s',
+                                    }}
+                                >
+                                    {btn.label}
+                                </button>
+                            );
+                        })}
+                    </div>
 
                     {/* Model picker */}
                     <div style={{ position: 'relative' }}>
@@ -270,7 +270,7 @@ export default function ChatInterface() {
                             style={{
                                 padding: '6px 12px',
                                 borderRadius: '8px',
-                                border: `1px solid ${BRAND_GREEN}55`,
+                                border: `1px solid ${backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN}55`,
                                 backgroundColor: '#18191c',
                                 color: '#f2f3f5',
                                 fontSize: '0.8rem',
@@ -282,7 +282,7 @@ export default function ChatInterface() {
                             }}
                         >
                             <span>{selectedModelInfo?.name ?? model}</span>
-                            <span style={{ color: BRAND_GREEN }}>▾</span>
+                            <span style={{ color: backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN }}>▾</span>
                         </button>
 
                         {showModelPicker && !modelLoaded && (
@@ -300,7 +300,7 @@ export default function ChatInterface() {
                                     boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
                                 }}
                             >
-                                {MODELS.map(m => (
+                                {currentModelsList.map(m => (
                                     <button
                                         key={m.id}
                                         onClick={() => {
@@ -313,7 +313,7 @@ export default function ChatInterface() {
                                             textAlign: 'left',
                                             backgroundColor: m.id === model ? '#232428' : 'transparent',
                                             border: 'none',
-                                            color: m.id === model ? BRAND_GREEN : '#b0b4bb',
+                                            color: m.id === model ? (backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN) : '#b0b4bb',
                                             fontSize: '0.85rem',
                                             cursor: 'pointer',
                                             display: 'flex',
@@ -329,8 +329,8 @@ export default function ChatInterface() {
                                                 fontSize: '0.65rem',
                                                 padding: '1px 6px',
                                                 borderRadius: '999px',
-                                                backgroundColor: `${BRAND_GREEN}22`,
-                                                color: BRAND_GREEN,
+                                                backgroundColor: `${backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN}22`,
+                                                color: backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN,
                                             }}
                                         >
                                             {m.tag}
@@ -349,7 +349,7 @@ export default function ChatInterface() {
                             style={{
                                 padding:         '6px 14px',
                                 borderRadius:    '8px',
-                                backgroundColor: useInferis ? INFERIS_BLUE : BUTTON_GREEN,
+                                backgroundColor: backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BUTTON_GREEN,
                                 border:          'none',
                                 color:           '#fff',
                                 fontSize:        '0.8rem',
@@ -357,10 +357,10 @@ export default function ChatInterface() {
                                 cursor:          'pointer',
                                 transition:      'background 0.2s',
                             }}
-                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = useInferis ? INFERIS_DARK : BUTTON_HOVER)}
-                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = useInferis ? INFERIS_BLUE : BUTTON_GREEN)}
+                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = backend === 'onnx' ? ONNX_DARK : backend === 'inferis' ? INFERIS_DARK : BUTTON_HOVER)}
+                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BUTTON_GREEN)}
                         >
-                            {useInferis ? '⚡ Load (inferis-ml)' : 'Load Model'}
+                            {backend === 'onnx' ? '🔮 Load (ONNX)' : backend === 'inferis' ? '⚡ Load (inferis-ml)' : 'Load Model'}
                         </button>
                     ) : (
                         <button

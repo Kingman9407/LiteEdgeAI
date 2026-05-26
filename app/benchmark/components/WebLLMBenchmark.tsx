@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useWebLLM } from '../hooks/useWebLLM';
 import { useInferisML } from '../hooks/useInferisML';
+import { useONNXWeb } from '../hooks/useONNXWeb';
 import { useGPUInfo } from '../hooks/useGPUInfo';
 import { ModelSelector } from './ModelSelector';
 import { BenchmarkPanel } from './BenchmarkPanel';
@@ -38,8 +39,8 @@ export default function WebLLMBenchmark() {
     const [specs, setSpecs] = useState<PCSpecs | null>(null);
     const [currentDifficulty, setCurrentDifficulty] = useState<string>('normal');
 
-    /** inferis-ml toggle */
-    const [useInferis, setUseInferis] = useState(false);
+    /** Active execution backend */
+    const [backend, setBackend] = useState<'webllm' | 'inferis' | 'onnx'>('webllm');
 
     const [benchmarkResults, setBenchmarkResults] = useState<{
         tokensPerSecond: number;
@@ -52,10 +53,12 @@ export default function WebLLMBenchmark() {
     const [rawBenchmarkRuns, setRawBenchmarkRuns] = useState<RawBenchmarkRun[]>([]);
     const [processedData, setProcessedData] = useState<ProcessedSession | null>(null);
 
-    // Both hooks always alive — we just pick which one to expose
+    // Three hooks always alive — we pick the active one by state
     const webLLM    = useWebLLM();
     const inferisML = useInferisML();
-    const active    = useInferis ? inferisML : webLLM;
+    const onnxWeb   = useONNXWeb();
+    
+    const active = backend === 'onnx' ? onnxWeb : backend === 'inferis' ? inferisML : webLLM;
 
     const {
         modelLoaded,
@@ -81,8 +84,8 @@ export default function WebLLMBenchmark() {
 
         if (noWebGPU || isAndroid || isMobile) {
             console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
-            setUseInferis(true);
-            setModel('SmolLM2-135M-Instruct-q0f16-MLC');
+            setBackend('onnx');
+            setModel('onnx-community/SmolLM2-135M-Instruct');
         }
     }, []);
 
@@ -200,8 +203,8 @@ export default function WebLLMBenchmark() {
                         unloadModel={unloadModel}
                         modelLoaded={modelLoaded}
                         status={status}
-                        useInferis={useInferis}
-                        onToggleInferis={() => setUseInferis(v => !v)}
+                        backend={backend}
+                        onChangeBackend={setBackend}
                     />
                 </div>
 

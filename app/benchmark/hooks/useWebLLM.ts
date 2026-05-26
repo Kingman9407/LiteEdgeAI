@@ -171,6 +171,35 @@ export function useWebLLM() {
 
         const ctx = MODEL_CONTEXT_WINDOWS[selectedModel] ?? DEFAULT_CONTEXT_WINDOW;
 
+        // Construct custom appConfig extending prebuilt list with SmolLM2-135M models
+        const customAppConfig = {
+            ...webllm.prebuiltAppConfig,
+            model_list: [
+                ...webllm.prebuiltAppConfig.model_list,
+                {
+                    model: "https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q0f16-MLC",
+                    model_id: "SmolLM2-135M-Instruct-q0f16-MLC",
+                    model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/SmolLM2-135M-Instruct-q0f16-ctx4k_cs1k-webgpu.wasm",
+                    vram_required_MB: 359.69,
+                    low_resource_required: true,
+                    required_features: ["shader-f16"],
+                    overrides: {
+                        context_window_size: 4096
+                    }
+                },
+                {
+                    model: "https://huggingface.co/mlc-ai/SmolLM2-135M-Instruct-q0f32-MLC",
+                    model_id: "SmolLM2-135M-Instruct-q0f32-MLC",
+                    model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/SmolLM2-135M-Instruct-q0f32-ctx4k_cs1k-webgpu.wasm",
+                    vram_required_MB: 719.38,
+                    low_resource_required: true,
+                    overrides: {
+                        context_window_size: 4096
+                    }
+                }
+            ]
+        };
+
         // UMA devices get full context freely — no PCIe overhead
         // Discrete GPUs / mobile get a sliding window to save VRAM.
         // WebLLM requires exactly one of context_window_size / sliding_window_size
@@ -179,11 +208,13 @@ export function useWebLLM() {
             ? {
                 context_window_size: ctx,
                 sliding_window_size: -1,
+                appConfig: customAppConfig,
             }
             : {
                 context_window_size: -1,
                 sliding_window_size: Math.floor(ctx / 2),
                 attention_sink_size: 4,
+                appConfig: customAppConfig,
             };
 
         // Temporarily suppress the annoying maxStorageBufferBindingSize console warning
