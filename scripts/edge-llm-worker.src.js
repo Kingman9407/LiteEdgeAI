@@ -299,56 +299,88 @@ async function generate(prompt, maxTokens = 256, reqId) {
 
     let fullText = '';
 
-    // ── Greedy decode loop (no KV cache) ──────────────────────────────────────
-    for (let step = 0; step < maxTokens; step++) {
-      const seqLen = currentIds.length;
+    // ── Greedy decode loop WITH KV CACHE ──────────────────────────────────────
+    let pastKeyValues = null;
 
-      // Build input tensors:
-      //   input_ids     : [1, seqLen]  int64  — token IDs
-      //   attention_mask: [1, seqLen]  int64  — all 1s
+    for (let step = 0; step < maxTokens; step++) {
+      let stepSeqLen;
+      let stepIds;
+      let stepAttnMask;
+      let stepPosIds;
+
+      if (step === 0) {
+        // Prefill Phase: process the entire prompt to prime the KV cache
+        stepSeqLen = currentIds.length;
+        stepIds = currentIds;
+        stepAttnMask = new BigInt64Array(stepSeqLen).fill(1n);
+        stepPosIds = new BigInt64Array(stepSeqLen);
+        for (let i = 0; i < stepSeqLen; i++) stepPosIds[i] = BigInt(i);
+      } else {
+        // Decode Phase: process only the 1 newly generated token
+        stepSeqLen = 1;
+        stepIds = [currentIds[currentIds.length - 1]];
+        const totalLen = currentIds.length;
+        stepAttnMask = new BigInt64Array(totalLen).fill(1n);
+        stepPosIds = new BigInt64Array([BigInt(totalLen - 1)]);
+      }
+
       const feeds = {
         input_ids: new ort.Tensor(
           'int64',
-          BigInt64Array.from(currentIds.map(BigInt)),
-          [1, seqLen]
+          BigInt64Array.from(stepIds.map(BigInt)),
+          [1, stepSeqLen]
         ),
         attention_mask: new ort.Tensor(
           'int64',
-          new BigInt64Array(seqLen).fill(1n),
-          [1, seqLen]
+          stepAttnMask,
+          [1, currentIds.length]
         ),
       };
 
       if (session.inputNames.includes('position_ids')) {
-        const posArray = new BigInt64Array(seqLen);
-        for (let i = 0; i < seqLen; i++) posArray[i] = BigInt(i);
-        feeds['position_ids'] = new ort.Tensor('int64', posArray, [1, seqLen]);
+        feeds['position_ids'] = new ort.Tensor('int64', stepPosIds, [1, stepSeqLen]);
       }
 
-      // Inject empty past_key_values if the model expects them
-      const emptyKvShape = [1, 3, 0, 64];
-      const emptyBuf = new Float32Array(0);
-      for (const name of session.inputNames) {
-        if (name.startsWith('past_key_values.') && !(name in feeds)) {
-          feeds[name] = new ort.Tensor('float32', emptyBuf, emptyKvShape);
+      // Inject KV Cache
+      if (pastKeyValues) {
+        for (const [k, v] of Object.entries(pastKeyValues)) {
+           const pastName = k.replace('present', 'past_key_values');
+           if (session.inputNames.includes(pastName)) {
+             feeds[pastName] = v;
+           }
+        }
+      } else {
+        // Empty KV cache for the prefill step
+        const emptyKvShape = [1, 3, 0, 64]; // SmolLM2-135M standard
+        const emptyBuf = new Float32Array(0);
+        for (const name of session.inputNames) {
+          if (name.startsWith('past_key_values.') && !(name in feeds)) {
+            feeds[name] = new ort.Tensor('float32', emptyBuf, emptyKvShape);
+          }
         }
       }
 
-      // Forward pass — each call to session.run() is one token generation step
+      // Forward pass
       const output = await session.run(feeds);
+      
+      // Save the 'present' tensors as 'pastKeyValues' for the next step
+      pastKeyValues = {};
+      for (const k of Object.keys(output)) {
+        if (k.startsWith('present')) {
+          pastKeyValues[k] = output[k];
+        }
+      }
+
       const logitsTensor = output.logits ?? output[session.outputNames[0]];
 
-      // Discover vocab size on first step
       if (vocabSize === 0) {
         vocabSize = logitsTensor.dims[2];
         console.log('[edge-llm] vocab size:', vocabSize);
       }
 
-      // logits shape: [1, seqLen, vocabSize] — grab last position's logits
-      const lastOffset = (seqLen - 1) * vocabSize;
+      const lastOffset = (stepSeqLen - 1) * vocabSize;
       const lastLogits = logitsTensor.data.slice(lastOffset, lastOffset + vocabSize);
 
-      // Greedy: pick the token with the highest logit (argmax)
       const nextId = argmax(lastLogits);
 
       if (step === 0) console.log('[edge-llm] First generated token id:', nextId);
