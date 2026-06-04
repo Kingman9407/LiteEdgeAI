@@ -33,14 +33,14 @@ interface RawBenchmarkRun {
 const BRAND_GREEN = '#4fbf8a';
 
 export default function WebLLMBenchmark() {
-    const [model, setModel] = useState('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+    const [model, setModel] = useState('Kingman9407/hornet');
     const [showGPU, setShowGPU] = useState(false);
     const [showSubmitPage, setShowSubmitPage] = useState(false);
     const [specs, setSpecs] = useState<PCSpecs | null>(null);
-    const [currentDifficulty, setCurrentDifficulty] = useState<string>('normal');
+    const [currentDifficulty, setCurrentDifficulty] = useState<string>('hornet');
 
     /** Active execution backend */
-    const [backend, setBackend] = useState<'webllm' | 'inferis' | 'onnx'>('webllm');
+    const [backend, setBackend] = useState<'webllm' | 'inferis' | 'onnx'>('onnx');
 
     const [benchmarkResults, setBenchmarkResults] = useState<{
         tokensPerSecond: number;
@@ -71,6 +71,14 @@ export default function WebLLMBenchmark() {
     const gpuInfo = useGPUInfo(true);
 
     useEffect(() => {
+        if (model === 'Kingman9407/hornet') {
+            setCurrentDifficulty('hornet');
+        } else {
+            setCurrentDifficulty('normal');
+        }
+    }, [model]);
+
+    useEffect(() => {
         setSpecs({
             cpuCores: navigator.hardwareConcurrency || 0,
             deviceMemory: (navigator as any).deviceMemory,
@@ -85,7 +93,7 @@ export default function WebLLMBenchmark() {
         if (noWebGPU || isAndroid || isMobile) {
             console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
             setBackend('onnx');
-            setModel('onnx-community/SmolLM2-135M-Instruct');
+            setModel('Kingman9407/hornet');
         }
     }, []);
 

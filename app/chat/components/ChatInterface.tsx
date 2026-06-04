@@ -22,25 +22,24 @@ interface Message {
 }
 
 const MODELS = [
-    { id: 'SmolLM2-135M-Instruct-q0f16-MLC',   name: 'SmolLM2 135M',  tag: 'Ultra Light' },
     { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',   name: 'Qwen 2.5 0.5B', tag: 'Lightest' },
     { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', name: 'TinyLlama 1.1B', tag: 'Light'   },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',    name: 'Llama 3.2 1B',  tag: 'Fast'     },
 ];
 
 const ONNX_MODELS = [
-    { id: 'onnx-community/SmolLM2-135M-Instruct', name: 'SmolLM2 135M (ONNX)', tag: 'WebGPU/WASM' }
+    { id: 'Kingman9407/hornet',                     name: 'Kingman Hornet',    tag: 'Default · Smallest' },
 ];
 
-const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
 
 export default function ChatInterface() {
     const [messages, setMessages]       = useState<Message[]>([]);
     const [input, setInput]             = useState('');
-    const [backend, setBackend]         = useState<'webllm' | 'inferis' | 'onnx'>('webllm');
-    const [model, setModel]             = useState('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+    const [backend, setBackend]         = useState<'webllm' | 'inferis' | 'onnx'>('onnx');
+    const [model, setModel]             = useState('Kingman9407/hornet');
     const [isGenerating, setIsGenerating] = useState(false);
     const [showModelPicker, setShowModelPicker] = useState(false);
+    const [hasWebGPU, setHasWebGPU]     = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef    = useRef<HTMLTextAreaElement>(null);
     const abortRef       = useRef(false);
@@ -72,10 +71,12 @@ export default function ChatInterface() {
         const isAndroid = /Android/i.test(navigator.userAgent);
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
+        setHasWebGPU(!noWebGPU && !isAndroid && !isMobile);
+
         if (noWebGPU || isAndroid || isMobile) {
             console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
             setBackend('onnx');
-            setModel('onnx-community/SmolLM2-135M-Instruct');
+            setModel('Kingman9407/hornet');
         }
     }, []);
 
@@ -153,8 +154,10 @@ export default function ChatInterface() {
         abortRef.current = true;
     };
 
-    const currentModelsList = backend === 'onnx' ? ONNX_MODELS : MODELS;
-    const selectedModelInfo = currentModelsList.find(m => m.id === model);
+    // When ONNX is selected, all models are available in the dropdown
+    const ALL_ONNX_MODELS = [...ONNX_MODELS, ...MODELS];
+    const currentModelsList = backend === 'onnx' ? ALL_ONNX_MODELS : MODELS;
+    const selectedModelInfo = [...ONNX_MODELS, ...MODELS].find(m => m.id === model);
 
     return (
         <div
@@ -230,16 +233,17 @@ export default function ChatInterface() {
                             { key: 'onnx', label: 'ONNX Web', color: ONNX_PURPLE },
                         ].map((btn) => {
                             const activeBtn = backend === btn.key;
+                            const isDisabled = btn.key !== 'onnx';
                             return (
                                 <button
                                     key={btn.key}
-                                    disabled={modelLoaded}
+                                    disabled={modelLoaded || isDisabled}
                                     onClick={() => {
                                         setBackend(btn.key as any);
                                         if (btn.key === 'onnx') {
-                                            setModel('onnx-community/SmolLM2-135M-Instruct');
+                                            setModel('Kingman9407/hornet');
                                         } else {
-                                            setModel('SmolLM2-135M-Instruct-q0f16-MLC');
+                                            setModel('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
                                         }
                                     }}
                                     style={{
@@ -250,8 +254,8 @@ export default function ChatInterface() {
                                         fontSize: '0.7rem',
                                         fontWeight: 600,
                                         padding: '4px 10px',
-                                        cursor: modelLoaded ? 'not-allowed' : 'pointer',
-                                        opacity: modelLoaded && !activeBtn ? 0.3 : 1,
+                                        cursor: (modelLoaded || isDisabled) ? 'not-allowed' : 'pointer',
+                                        opacity: isDisabled ? 0.2 : (modelLoaded && !activeBtn ? 0.3 : 1),
                                         transition: 'all 0.22s',
                                     }}
                                 >

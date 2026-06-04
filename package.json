@@ -5,14 +5,16 @@
   "scripts": {
     "copy-wasm": "node scripts/copy-ort-wasm.js",
     "build-inferis-worker": "node scripts/build-inferis-worker.mjs",
-    "predev": "npm run copy-wasm && npm run build-inferis-worker",
+    "build-edge-worker": "node scripts/build-edge-llm-worker.mjs",
+    "predev": "npm run copy-wasm && npm run build-inferis-worker && npm run build-edge-worker",
     "dev": "next dev",
-    "prebuild": "git lfs pull && npm run copy-wasm && npm run build-inferis-worker",
+    "prebuild": "git lfs pull && npm run copy-wasm && npm run build-inferis-worker && npm run build-edge-worker",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@mediapipe/tasks-vision": "^0.10.34",
     "@mlc-ai/web-llm": "^0.2.80",
     "@supabase/supabase-js": "^2.95.3",

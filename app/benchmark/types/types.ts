@@ -80,7 +80,7 @@ export type GPUInfo = {
    BENCHMARK TYPES
    ===================================================== */
 
-export type BenchmarkMode = 'normal' | 'hard' | 'extreme';
+export type BenchmarkMode = 'normal' | 'hard' | 'extreme' | 'hornet';
 
 export interface BenchmarkTest {
     name: string;

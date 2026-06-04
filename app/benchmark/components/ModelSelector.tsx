@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
 const BRAND_GREEN  = '#4fbf8a';
 const BUTTON_GREEN = '#3fa77a';
 const BUTTON_HOVER = '#357a5a';
@@ -20,17 +22,20 @@ interface ModelSelectorProps {
 }
 
 const MLC_MODELS = [
-    { id: 'SmolLM2-135M-Instruct-q0f16-MLC',      name: 'SmolLM2 135M (Ultra Light)' },
     { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',    name: 'Qwen 2.5 0.5B (Lightest)' },
     { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC',  name: 'TinyLlama 1.1B (Light)'   },
     { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',     name: 'Llama 3.2 1B (Fastest)'   },
 ];
 
-const ONNX_MODELS = [
-    { id: 'onnx-community/SmolLM2-135M-Instruct', name: 'SmolLM2 135M (ONNX Web)' }
+const ONNX_ONLY_MODELS = [
+    { id: 'Kingman9407/hornet', name: 'Kingman Hornet (Default · Smallest)' },
 ];
 
-const hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
+// When ONNX is selected, all models are available — the runtime handles what it can load
+const ALL_ONNX_MODELS = [
+    ...ONNX_ONLY_MODELS,
+    ...MLC_MODELS,
+];
 
 export function ModelSelector({
     selectedModel,
@@ -42,6 +47,12 @@ export function ModelSelector({
     backend,
     onChangeBackend,
 }: ModelSelectorProps) {
+    const [hasWebGPU, setHasWebGPU] = useState(false);
+
+    useEffect(() => {
+        setHasWebGPU(!!navigator.gpu);
+    }, []);
+
     const isONNX = backend === 'onnx';
     const isInferis = backend === 'inferis';
     const isWebLLM = backend === 'webllm';
@@ -50,7 +61,7 @@ export function ModelSelector({
     const activeColorDark = isONNX ? ONNX_DARK : isInferis ? INFERIS_DARK : BUTTON_HOVER;
     const activeBgColor = isONNX ? ONNX_PURPLE : isInferis ? INFERIS_BLUE : BUTTON_GREEN;
 
-    const currentModels = isONNX ? ONNX_MODELS : MLC_MODELS;
+    const currentModels = isONNX ? ALL_ONNX_MODELS : MLC_MODELS;
 
     const getBackendDescription = () => {
         if (!hasWebGPU) {
@@ -90,17 +101,18 @@ export function ModelSelector({
                         { key: 'onnx', label: 'ONNX Runtime', color: ONNX_PURPLE }
                     ].map((btn) => {
                         const active = backend === btn.key;
+                        const isDisabled = btn.key !== 'onnx';
                         return (
                             <button
                                 key={btn.key}
-                                disabled={modelLoaded}
+                                disabled={modelLoaded || isDisabled}
                                 onClick={() => {
                                     onChangeBackend(btn.key as any);
                                     // Auto-select standard model for backend
                                     if (btn.key === 'onnx') {
-                                        setSelectedModel('onnx-community/SmolLM2-135M-Instruct');
+                                        setSelectedModel('Kingman9407/hornet');
                                     } else {
-                                        setSelectedModel('SmolLM2-135M-Instruct-q0f16-MLC');
+                                        setSelectedModel('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
                                     }
                                 }}
                                 style={{
@@ -111,8 +123,8 @@ export function ModelSelector({
                                     border: 'none',
                                     backgroundColor: active ? btn.color : 'transparent',
                                     color: active ? '#fff' : '#b0b4bb',
-                                    cursor: modelLoaded ? 'not-allowed' : 'pointer',
-                                    opacity: modelLoaded && !active ? 0.3 : 1,
+                                    cursor: (modelLoaded || isDisabled) ? 'not-allowed' : 'pointer',
+                                    opacity: isDisabled ? 0.15 : (modelLoaded && !active ? 0.3 : 1),
                                     transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                                     boxShadow: active ? `0 2px 8px ${btn.color}40` : 'none',
                                     textAlign: 'center'

@@ -69,5 +69,5 @@ export type GPUInfo = {
     maxAnisotropy?: number;
 };
 
-export type BenchmarkMode = 'normal' | 'hard';
+export type BenchmarkMode = 'normal' | 'hard' | 'extreme' | 'hornet';
 

@@ -35,6 +35,10 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
     const [phase, setPhase] = useState('');
     const resultsAccRef = useRef<BenchmarkResult[]>([]);
 
+    const modes = difficulty === 'hornet'
+        ? (['hornet'] as BenchmarkMode[])
+        : (['normal', 'hard', 'extreme'] as BenchmarkMode[]);
+
     const tests = BENCHMARKS[mode];
 
     const totalSuiteTokens = tests.reduce((sum, t) => sum + t.maxTokens, 0);
@@ -177,7 +181,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
         <div className="space-y-4">
             {/* Mode Selector */}
             <div className="flex gap-2 flex-wrap">
-                {(['normal', 'hard', 'extreme'] as BenchmarkMode[]).map((m) => (
+                {modes.map((m) => (
                     <button
                         key={m}
                         onClick={() => onDifficultyChange(m)}
@@ -185,23 +189,30 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                         className={`px-4 py-2 rounded-lg transition-all text-sm font-medium capitalize ${mode === m
                             ? m === 'extreme'
                                 ? 'bg-red-500 text-white'
-                                : 'bg-[#4fbf8a] text-white'
+                                : m === 'hornet'
+                                    ? 'bg-purple-600 text-white border border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                                    : 'bg-[#4fbf8a] text-white'
                             : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
                             }`}
                     >
-                        {m}
+                        {m === 'hornet' ? 'Hornet Benchmark (In-House)' : m}
                     </button>
                 ))}
             </div>
 
             {/* Suite Info */}
-            <div className="text-xs text-[#b0b4bb] flex gap-4">
+            <div className="text-xs text-[#b0b4bb] flex gap-4 flex-wrap items-center">
                 <span>{tests.length} tests</span>
                 <span>Up to {totalSuiteTokens.toLocaleString()} total tokens</span>
                 <span>{ITERATIONS_PER_TEST} iterations each</span>
                 {mode === 'extreme' && (
                     <span className="text-red-400 font-medium">
                         ⚠️ May crash on low-memory devices
+                    </span>
+                )}
+                {mode === 'hornet' && (
+                    <span className="text-purple-400 font-medium animate-pulse">
+                        🔮 Custom video-editing evaluation suite
                     </span>
                 )}
             </div>
@@ -221,7 +232,9 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                                 ? 'bg-red-500/20 text-red-400'
                                 : test.maxTokens >= 1024
                                     ? 'bg-yellow-500/20 text-yellow-400'
-                                    : 'bg-[#4fbf8a]/20 text-[#4fbf8a]'
+                                    : mode === 'hornet'
+                                        ? 'bg-purple-500/20 text-purple-400'
+                                        : 'bg-[#4fbf8a]/20 text-[#4fbf8a]'
                                 }`}>
                                 {test.maxTokens} tokens
                             </span>
@@ -239,7 +252,9 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                     disabled:opacity-40 disabled:cursor-not-allowed
                     ${mode === 'extreme'
                         ? 'bg-red-500/10 hover:bg-red-500/20 border border-red-500 text-[#f2f3f5] disabled:hover:bg-red-500/10'
-                        : 'bg-[#4fbf8a]/10 hover:bg-[#4fbf8a]/20 border border-[#4fbf8a] text-[#f2f3f5] disabled:hover:bg-[#4fbf8a]/10'
+                        : mode === 'hornet'
+                            ? 'bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500 text-[#f2f3f5] disabled:hover:bg-purple-500/10'
+                            : 'bg-[#4fbf8a]/10 hover:bg-[#4fbf8a]/20 border border-[#4fbf8a] text-[#f2f3f5] disabled:hover:bg-[#4fbf8a]/10'
                     }`}
             >
                 {running
@@ -248,7 +263,9 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                         : `Running ${current}/${tests.length}`
                     : mode === 'extreme'
                         ? '🔥 Run Extreme Benchmark'
-                        : 'Run Benchmark'}
+                        : mode === 'hornet'
+                            ? '🔮 Run Hornet Benchmark'
+                            : 'Run Benchmark'}
             </button>
 
             {/* Summary */}

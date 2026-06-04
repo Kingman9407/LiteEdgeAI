@@ -98,14 +98,12 @@ export function useWebLLM() {
     };
 
     const recommendModel = (caps: DeviceCapabilities): string => {
-        let modelId = 'SmolLM2-135M-Instruct-q0f16-MLC';
+        let modelId = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
 
         if (caps.memoryGB >= 4) {
             modelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
         } else if (caps.memoryGB >= 2) {
             modelId = 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC';
-        } else if (caps.memoryGB >= 1) {
-            modelId = 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
         }
 
         // Proactively fallback to f32 if shader-f16 is missing to avoid pipeline crashes

@@ -109,4 +109,35 @@ export const BENCHMARKS = {
             category: 'speed',
         },
     ],
+
+    hornet: <BenchmarkTest[]>[
+        {
+            name: 'Absolute Time Parsing',
+            description: 'MM:SS conversion & multi-op parsing',
+            prompt: 'Duration: 300.0\nPlayhead: 0.0\nSilent Sections: []\nMuted Sections: []\n\nUser: cut out the segment from 01:15 to 01:45 and mute the audio from 02:30 to 03:00',
+            maxTokens: 256,
+            category: 'reasoning',
+        },
+        {
+            name: 'Context-Aware Resolution',
+            description: 'Timeline dependency resolution',
+            prompt: 'Duration: 180.0\nPlayhead: 0.0\nSilent Sections: [30.0-45.0, 100.0-115.0]\nMuted Sections: []\n\nUser: cut out the silent parts of the video',
+            maxTokens: 256,
+            category: 'reasoning',
+        },
+        {
+            name: 'Playhead-Relative Edits',
+            description: 'Relative calculations & asset matching',
+            prompt: 'Duration: 180.0\nPlayhead: 50.0\nSilent Sections: []\nMuted Sections: []\n\nUser: cut the next 20 seconds from the current playhead and add upbeat.mp3 as background music from 0.0 to 120.0 seconds',
+            maxTokens: 256,
+            category: 'reasoning',
+        },
+        {
+            name: 'Natural Boundary Trimming',
+            description: 'Trimming intro and duration boundaries',
+            prompt: 'Duration: 180.0\nPlayhead: 0.0\nSilent Sections: []\nMuted Sections: []\n\nUser: trim off the first 10 seconds of the video and remove the ending',
+            maxTokens: 256,
+            category: 'reasoning',
+        },
+    ],
 };
