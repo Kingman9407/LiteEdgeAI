@@ -1,123 +1,129 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useWebLLM } from '../hooks/useWebLLM';
-import { useInferisML } from '../hooks/useInferisML';
-import { useONNXWeb } from '../hooks/useONNXWeb';
-import { useGPUInfo } from '../hooks/useGPUInfo';
-import { ModelSelector } from './ModelSelector';
-import { BenchmarkPanel } from './BenchmarkPanel';
-import { GPUInfoModal } from './GPUInfoModal';
+import { useInferisML }  from '../hooks/useInferisML';
+import { useONNXWeb }    from '../hooks/useONNXWeb';
+import { useGPUInfo }    from '../hooks/useGPUInfo';
+import { ModelSelector, type ModelChoice } from './ModelSelector';
+import { BenchmarkPanel }    from './BenchmarkPanel';
+import { GPUInfoModal }      from './GPUInfoModal';
 import { SubmitResultsPage } from '../results/components/results';
-import type {
-    BenchmarkResult,
-    PCSpecs,
-} from '../../benchmark/types/types';
-import {
-    BenchmarkDataProcessor,
-    type ProcessedSession
-} from '../results/components/Benchmarkdataprocessor';
+import type { BenchmarkResult, PCSpecs } from '../../benchmark/types/types';
+import { BenchmarkDataProcessor, type ProcessedSession } from '../results/components/Benchmarkdataprocessor';
 
 interface RawBenchmarkRun {
-    testName: string;
-    startTime: number;
-    endTime: number;
-    tokenCount: number;
-    wordCount: number;
-    modelUsed?: string;
-    loadTimeMs?: number;
-    prompt?: string;
-    response?: string;
+    testName:            string;
+    startTime:           number;
+    endTime:             number;
+    tokenCount:          number;
+    wordCount:           number;
+    modelUsed?:          string;
+    loadTimeMs?:         number;
+    prompt?:             string;
+    response?:           string;
 }
 
 const BRAND_GREEN = '#4fbf8a';
 
-export default function WebLLMBenchmark() {
-    const [model, setModel] = useState('Kingman9407/hornet');
-    const [showGPU, setShowGPU] = useState(false);
-    const [showSubmitPage, setShowSubmitPage] = useState(false);
-    const [specs, setSpecs] = useState<PCSpecs | null>(null);
-    const [currentDifficulty, setCurrentDifficulty] = useState<string>('hornet');
+/** Detect mobile/tablet at runtime */
+function detectMobile() {
+    if (typeof navigator === 'undefined') return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
 
-    /** Active execution backend */
-    const [backend, setBackend] = useState<'webllm' | 'inferis' | 'onnx'>('onnx');
+export default function WebLLMBenchmark() {
+    const [choice, setChoice]         = useState<ModelChoice>('inferis'); // default: inferis-ml
+    const [isMobile, setIsMobile]     = useState(false);
+    const [showGPU, setShowGPU]       = useState(false);
+    const [showSubmitPage, setShowSubmitPage] = useState(false);
+    const [specs, setSpecs]           = useState<PCSpecs | null>(null);
+    const [currentDifficulty, setCurrentDifficulty] = useState<string>('normal');
 
     const [benchmarkResults, setBenchmarkResults] = useState<{
-        tokensPerSecond: number;
-        firstTokenLatencyMs: number;
-        totalBenchmarkTime: number;
-        score: number;
-        benchmarks: BenchmarkResult[];
+        tokensPerSecond:      number;
+        firstTokenLatencyMs:  number;
+        totalBenchmarkTime:   number;
+        score:                number;
+        benchmarks:           BenchmarkResult[];
     } | null>(null);
 
     const [rawBenchmarkRuns, setRawBenchmarkRuns] = useState<RawBenchmarkRun[]>([]);
-    const [processedData, setProcessedData] = useState<ProcessedSession | null>(null);
+    const [processedData,    setProcessedData]    = useState<ProcessedSession | null>(null);
 
-    // Three hooks always alive — we pick the active one by state
-    const webLLM    = useWebLLM();
-    const inferisML = useInferisML();
+    // Two hooks — Hornet (ONNX) and inferis-ml
     const onnxWeb   = useONNXWeb();
-    
-    const active = backend === 'onnx' ? onnxWeb : backend === 'inferis' ? inferisML : webLLM;
+    const inferisML = useInferisML();
 
-    const {
-        modelLoaded,
-        status,
-        loadModel,
-        unloadModel,
-        generateStreamBenchmark,
-    } = active;
+    // Active hook determined by user's card selection
+    const active = choice === 'hornet' ? onnxWeb : inferisML;
+    const { modelLoaded, status, loadModel, unloadModel, generateStreamBenchmark } = active;
 
     const gpuInfo = useGPUInfo(true);
 
+    // Detect device on mount + force hornet → inferis if on desktop
     useEffect(() => {
-        if (model === 'Kingman9407/hornet') {
-            setCurrentDifficulty('hornet');
-        } else {
-            setCurrentDifficulty('normal');
-        }
-    }, [model]);
+        const mobile = detectMobile();
+        setIsMobile(mobile);
 
-    useEffect(() => {
         setSpecs({
-            cpuCores: navigator.hardwareConcurrency || 0,
+            cpuCores:     navigator.hardwareConcurrency || 0,
             deviceMemory: (navigator as any).deviceMemory,
-            os: navigator.platform,
-            screen: `${window.screen.width} × ${window.screen.height}`,
+            os:           navigator.platform,
+            screen:       `${window.screen.width} × ${window.screen.height}`,
         });
 
-        const noWebGPU = typeof navigator === 'undefined' || !navigator.gpu;
-        const isAndroid = /Android/i.test(navigator.userAgent);
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-        if (noWebGPU || isAndroid || isMobile) {
-            console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
-            setBackend('onnx');
-            setModel('Kingman9407/hornet');
+        // On mobile, default to hornet; on desktop, force inferis
+        if (mobile) {
+            setChoice('hornet');
+        } else {
+            setChoice('inferis');
         }
     }, []);
 
+    // Track difficulty from chosen model
+    useEffect(() => {
+        setCurrentDifficulty(choice === 'hornet' ? 'hornet' : 'normal');
+    }, [choice]);
+
+    // When model choice changes and a model is loaded, unload before switching
+    const handleChoiceChange = (newChoice: ModelChoice) => {
+        if (modelLoaded) return; // prevent switching while loaded
+        setChoice(newChoice);
+    };
+
+    const modelDisplayName = choice === 'hornet'
+        ? 'Kingman9407/hornet'
+        : 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC';
+
+    const handleLoad = () => {
+        if (choice === 'hornet') {
+            onnxWeb.loadModel('Kingman9407/hornet');
+        } else {
+            inferisML.loadModel('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+        }
+    };
+
     const handleBenchmarkComplete = (results: {
-        tokensPerSecond: number;
+        tokensPerSecond:     number;
         firstTokenLatencyMs: number;
-        totalBenchmarkTime: number;
-        score: number;
-        benchmarks: BenchmarkResult[];
+        totalBenchmarkTime:  number;
+        score:               number;
+        benchmarks:          BenchmarkResult[];
     }) => {
         setBenchmarkResults(results);
 
         const rawRuns: RawBenchmarkRun[] = results.benchmarks.map(bench => ({
-            testName: bench.name,
-            startTime: bench.startTime,
-            endTime: bench.endTime,
+            testName:   bench.name,
+            startTime:  bench.startTime,
+            endTime:    bench.endTime,
             tokenCount: bench.tokenCount,
-            wordCount: bench.wordCount,
-            modelUsed: model,
+            wordCount:  bench.wordCount,
+            modelUsed:  modelDisplayName,
             loadTimeMs: results.totalBenchmarkTime * 1000,
-            prompt: bench.prompt,
-            response: bench.response,
-            maxTokens: bench.maxTokens,                            // ← now forwarded
-            firstTokenLatencyMs: bench.firstTokenLatencyMs,        // ← now forwarded
+            prompt:     bench.prompt,
+            response:   bench.response,
+            maxTokens:              bench.maxTokens,
+            firstTokenLatencyMs:    bench.firstTokenLatencyMs,
         }));
 
         setRawBenchmarkRuns(rawRuns);
@@ -130,31 +136,31 @@ export default function WebLLMBenchmark() {
             systemInfo: {
                 navigator: {
                     hardwareConcurrency: navigator.hardwareConcurrency,
-                    deviceMemory: (navigator as any).deviceMemory,
-                    platform: navigator.platform,
-                    userAgent: navigator.userAgent,
+                    deviceMemory:        (navigator as any).deviceMemory,
+                    platform:            navigator.platform,
+                    userAgent:           navigator.userAgent,
                 },
                 screen: {
-                    width: window.screen.width,
+                    width:  window.screen.width,
                     height: window.screen.height,
                 },
             },
             gpuInfo: {
-                vendor: gpuInfo.unmaskedVendor || gpuInfo.vendor,
-                renderer: gpuInfo.unmaskedRenderer || gpuInfo.renderer,
-                version: gpuInfo.webglVersion || (gpuInfo.webgl2 ? 'WebGL 2' : 'WebGL 1'),
+                vendor:                 gpuInfo.unmaskedVendor || gpuInfo.vendor,
+                renderer:               gpuInfo.unmaskedRenderer || gpuInfo.renderer,
+                version:                gpuInfo.webglVersion || (gpuInfo.webgl2 ? 'WebGL 2' : 'WebGL 1'),
                 shadingLanguageVersion: gpuInfo.shadingLanguageVersion,
-                maxTextureSize: gpuInfo.maxTextureSize,
+                maxTextureSize:         gpuInfo.maxTextureSize,
                 maxViewportDims:
                     (gpuInfo.maxViewportWidth != null && gpuInfo.maxViewportHeight != null)
                         ? [gpuInfo.maxViewportWidth, gpuInfo.maxViewportHeight] as [number, number]
                         : undefined,
-                maxAnisotropy: gpuInfo.maxAnisotropy,
-                extensions: gpuInfo.extensions,
+                maxAnisotropy:       gpuInfo.maxAnisotropy,
+                extensions:          gpuInfo.extensions,
                 supportedExtensions: gpuInfo.extensions,
             },
             benchmarkRuns: rawBenchmarkRuns,
-            timestamp: Date.now(),
+            timestamp:     Date.now(),
             detectedGPUInfo: gpuInfo,
         };
 
@@ -163,12 +169,8 @@ export default function WebLLMBenchmark() {
         setShowSubmitPage(true);
     };
 
-    const handleActualSubmit = () => {
-        if (!processedData) return;
-        setShowSubmitPage(false);
-    };
-
-    const handleSkip = () => setShowSubmitPage(false);
+    const handleActualSubmit = () => { if (!processedData) return; setShowSubmitPage(false); };
+    const handleSkip         = () => setShowSubmitPage(false);
 
     if (showSubmitPage && processedData) {
         return (
@@ -178,8 +180,8 @@ export default function WebLLMBenchmark() {
                 onSkip={handleSkip}
                 firstTokenLatencyMs={benchmarkResults?.firstTokenLatencyMs ?? null}
                 totalBenchmarkTime={benchmarkResults?.totalBenchmarkTime ?? null}
-                modelName={model}
-                difficulty={currentDifficulty}   // ← fixed reference
+                modelName={modelDisplayName}
+                difficulty={currentDifficulty}
             />
         );
     }
@@ -190,9 +192,7 @@ export default function WebLLMBenchmark() {
 
                 <h1
                     className="text-4xl font-bold text-center tracking-wide text-[#f2f3f5]"
-                    style={{
-                        textShadow: `0 0 20px ${BRAND_GREEN}40, 0 0 40px ${BRAND_GREEN}20`
-                    }}
+                    style={{ textShadow: `0 0 20px ${BRAND_GREEN}40, 0 0 40px ${BRAND_GREEN}20` }}
                 >
                     WebLLM Benchmark
                 </h1>
@@ -203,25 +203,26 @@ export default function WebLLMBenchmark() {
                     </span>
                 </div>
 
+                {/* ─── Model Selector ─── */}
                 <div className="rounded-xl bg-[#18191c] backdrop-blur p-4 border border-[#34363c] shadow-lg hover:shadow-xl transition-shadow">
                     <ModelSelector
-                        selectedModel={model}
-                        setSelectedModel={setModel}
-                        loadModel={() => loadModel(model)}
+                        choice={choice}
+                        setChoice={handleChoiceChange}
+                        loadModel={handleLoad}
                         unloadModel={unloadModel}
                         modelLoaded={modelLoaded}
                         status={status}
-                        backend={backend}
-                        onChangeBackend={setBackend}
+                        isMobile={isMobile}
                     />
                 </div>
 
+                {/* ─── GPU info row ─── */}
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowGPU(true)}
                         className="px-4 py-2 rounded-lg border transition-all
                             border-[#34363c] text-[#b0b4bb] bg-[#18191c]
-                            hover:border-[#4fbf8a] hover:text-[#4fbf8a] 
+                            hover:border-[#4fbf8a] hover:text-[#4fbf8a]
                             hover:bg-[#4fbf8a]/5"
                     >
                         GPU Specs
@@ -238,7 +239,7 @@ export default function WebLLMBenchmark() {
                     )}
                 </div>
 
-                {/* ─── pass difficulty state to BenchmarkPanel ─── */}
+                {/* ─── Benchmark Panel ─── */}
                 <div className="rounded-xl bg-[#18191c] p-4 border border-[#34363c] shadow-lg hover:shadow-xl transition-shadow">
                     <BenchmarkPanel
                         disabled={!modelLoaded}
@@ -249,6 +250,7 @@ export default function WebLLMBenchmark() {
                     />
                 </div>
 
+                {/* ─── Submit button ─── */}
                 <div className="flex justify-center">
                     <button
                         onClick={handleSubmitResults}
@@ -263,6 +265,7 @@ export default function WebLLMBenchmark() {
                     </button>
                 </div>
 
+                {/* ─── System specs ─── */}
                 {specs && (
                     <div className="rounded-xl bg-[#18191c] p-4 text-sm border border-[#34363c] text-[#b0b4bb]">
                         <div className="flex flex-wrap gap-4">

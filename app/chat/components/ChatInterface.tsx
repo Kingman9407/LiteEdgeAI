@@ -1,58 +1,63 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useWebLLM }    from '../../benchmark/hooks/useWebLLM';
 import { useInferisML } from '../../benchmark/hooks/useInferisML';
 import { useONNXWeb }   from '../../benchmark/hooks/useONNXWeb';
 
-const BRAND_GREEN  = '#4fbf8a';
-const BUTTON_GREEN = '#3fa77a';
-const BUTTON_HOVER = '#357a5a';
-const INFERIS_BLUE = '#5b8ef5';
-const INFERIS_DARK = '#3a6ad4';
-const ONNX_PURPLE  = '#a855f7';
-const ONNX_DARK    = '#7e22ce';
+const BRAND_GREEN   = '#4fbf8a';
+const BUTTON_GREEN  = '#3fa77a';
+const BUTTON_HOVER  = '#357a5a';
+const HORNET_AMBER  = '#f5a623';
+const HORNET_DARK   = '#c47d0a';
+const INFERIS_BLUE  = '#5b8ef5';
+const INFERIS_DARK  = '#3a6ad4';
+
+type ModelChoice = 'hornet' | 'inferis';
 
 interface Message {
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: Date;
+    id:         string;
+    role:       'user' | 'assistant';
+    content:    string;
+    timestamp:  Date;
     streaming?: boolean;
 }
 
-const MODELS = [
-    { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',   name: 'Qwen 2.5 0.5B', tag: 'Lightest' },
-    { id: 'TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC', name: 'TinyLlama 1.1B', tag: 'Light'   },
-    { id: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',    name: 'Llama 3.2 1B',  tag: 'Fast'     },
-];
-
-const ONNX_MODELS = [
-    { id: 'Kingman9407/hornet',                     name: 'Kingman Hornet',    tag: 'Default · Smallest' },
-];
-
+/** Detect mobile/tablet */
+function isMobileDevice() {
+    if (typeof navigator === 'undefined') return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
 
 export default function ChatInterface() {
-    const [messages, setMessages]       = useState<Message[]>([]);
-    const [input, setInput]             = useState('');
-    const [backend, setBackend]         = useState<'webllm' | 'inferis' | 'onnx'>('onnx');
-    const [model, setModel]             = useState('Kingman9407/hornet');
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [showModelPicker, setShowModelPicker] = useState(false);
-    const [hasWebGPU, setHasWebGPU]     = useState(false);
+    const [messages,      setMessages]      = useState<Message[]>([]);
+    const [input,         setInput]         = useState('');
+    const [choice,        setChoice]        = useState<ModelChoice>('inferis');
+    const [isMobile,      setIsMobile]      = useState(false);
+    const [isGenerating,  setIsGenerating]  = useState(false);
+    const [showPicker,    setShowPicker]    = useState(false);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef    = useRef<HTMLTextAreaElement>(null);
     const abortRef       = useRef(false);
 
-    // Three hooks always alive — pick active
-    const webLLM    = useWebLLM();
-    const inferisML = useInferisML();
+    // Two hooks — Hornet (ONNX) and inferis-ml
     const onnxWeb   = useONNXWeb();
-    const active    = backend === 'onnx' ? onnxWeb : backend === 'inferis' ? inferisML : webLLM;
+    const inferisML = useInferisML();
 
-    const { modelLoaded, status, loadModel, unloadModel, generateStream } = active;
+    const active = choice === 'hornet' ? onnxWeb : inferisML;
+    const { modelLoaded, status, unloadModel, generateStream } = active;
 
-    // Auto-scroll
+    const activeColor     = choice === 'hornet' ? HORNET_AMBER  : INFERIS_BLUE;
+    const activeColorDark = choice === 'hornet' ? HORNET_DARK   : INFERIS_DARK;
+
+    // Detect device + set default choice
+    useEffect(() => {
+        const mobile = isMobileDevice();
+        setIsMobile(mobile);
+        setChoice(mobile ? 'hornet' : 'inferis');
+    }, []);
+
+    // Auto-scroll to latest message
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
@@ -65,36 +70,42 @@ export default function ChatInterface() {
         ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
     }, [input]);
 
-    // Auto WASM CPU Fallback if WebGPU is unsupported or on mobile/Android
+    // Close picker on outside click
     useEffect(() => {
-        const noWebGPU = typeof navigator === 'undefined' || !navigator.gpu;
-        const isAndroid = /Android/i.test(navigator.userAgent);
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (!showPicker) return;
+        const handler = () => setShowPicker(false);
+        window.addEventListener('click', handler);
+        return () => window.removeEventListener('click', handler);
+    }, [showPicker]);
 
-        setHasWebGPU(!noWebGPU && !isAndroid && !isMobile);
-
-        if (noWebGPU || isAndroid || isMobile) {
-            console.log(`WASM fallback activated: noWebGPU=${noWebGPU}, Android=${isAndroid}, mobile=${isMobile}`);
-            setBackend('onnx');
-            setModel('Kingman9407/hornet');
+    const handleLoad = () => {
+        if (choice === 'hornet') {
+            onnxWeb.loadModel('Kingman9407/hornet');
+        } else {
+            inferisML.loadModel('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
         }
-    }, []);
+    };
+
+    const handleChoiceChange = (next: ModelChoice) => {
+        if (modelLoaded) return; // prevent switching while loaded
+        setChoice(next);
+        setShowPicker(false);
+    };
 
     const sendMessage = useCallback(async () => {
         const text = input.trim();
         if (!text || !modelLoaded || isGenerating) return;
 
         const userMsg: Message = {
-            id: crypto.randomUUID(),
-            role: 'user',
-            content: text,
+            id:        crypto.randomUUID(),
+            role:      'user',
+            content:   text,
             timestamp: new Date(),
         };
-
         const assistantMsg: Message = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: '',
+            id:        crypto.randomUUID(),
+            role:      'assistant',
+            content:   '',
             timestamp: new Date(),
             streaming: true,
         };
@@ -113,19 +124,14 @@ export default function ChatInterface() {
                 accumulated += chunk;
                 setMessages(prev =>
                     prev.map(m =>
-                        m.id === assistantMsg.id
-                            ? { ...m, content: accumulated }
-                            : m
+                        m.id === assistantMsg.id ? { ...m, content: accumulated } : m
                     )
                 );
             }
 
-            // Mark streaming done
             setMessages(prev =>
                 prev.map(m =>
-                    m.id === assistantMsg.id
-                        ? { ...m, streaming: false }
-                        : m
+                    m.id === assistantMsg.id ? { ...m, streaming: false } : m
                 )
             );
         } catch (err) {
@@ -154,217 +160,217 @@ export default function ChatInterface() {
         abortRef.current = true;
     };
 
-    // When ONNX is selected, all models are available in the dropdown
-    const ALL_ONNX_MODELS = [...ONNX_MODELS, ...MODELS];
-    const currentModelsList = backend === 'onnx' ? ALL_ONNX_MODELS : MODELS;
-    const selectedModelInfo = [...ONNX_MODELS, ...MODELS].find(m => m.id === model);
+    // ── Model display labels ──────────────────────────────────────────────────
+    const modelLabel = choice === 'hornet'
+        ? { icon: '🐝', name: 'Kingman Hornet', sub: '135M · ONNX · Mobile' }
+        : { icon: '⚡', name: 'inferis-ml',      sub: 'Qwen 2.5 0.5B · WebGPU' };
 
     return (
         <div
             style={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100dvh',
+                display:         'flex',
+                flexDirection:   'column',
+                height:          '100dvh',
                 backgroundColor: '#0a0b0d',
-                color: '#f2f3f5',
-                fontFamily: 'var(--font-geist-sans, system-ui, sans-serif)',
+                color:           '#f2f3f5',
+                fontFamily:      'var(--font-geist-sans, system-ui, sans-serif)',
             }}
         >
-            {/* ── Header ── */}
+            {/* ══════════════ HEADER ══════════════ */}
             <header
                 style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '72px 20px 12px',
-                    borderBottom: '1px solid #34363c',
+                    display:         'flex',
+                    alignItems:      'center',
+                    justifyContent:  'space-between',
+                    padding:         '72px 20px 12px',
+                    borderBottom:    '1px solid #1e2024',
                     backgroundColor: '#0a0b0d',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 10,
-                    flexWrap: 'wrap',
-                    gap: '10px',
+                    position:        'sticky',
+                    top:             0,
+                    zIndex:          20,
+                    flexWrap:        'wrap',
+                    gap:             '10px',
                 }}
             >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {/* Left: title */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <h1
                         style={{
-                            fontSize: '1.4rem',
+                            fontSize:   '1.3rem',
                             fontWeight: 700,
-                            letterSpacing: '0.04em',
+                            margin:     0,
+                            color:      '#f2f3f5',
                             textShadow: `0 0 18px ${BRAND_GREEN}50`,
-                            color: '#f2f3f5',
-                            margin: 0,
                         }}
                     >
                         Local AI Chat
                     </h1>
                     <span
                         style={{
-                            fontSize: '0.7rem',
-                            padding: '2px 8px',
-                            borderRadius: '999px',
+                            fontSize:        '0.65rem',
+                            padding:         '2px 8px',
+                            borderRadius:    '999px',
                             backgroundColor: `${BRAND_GREEN}18`,
-                            border: `1px solid ${BRAND_GREEN}55`,
-                            color: BRAND_GREEN,
-                            fontWeight: 600,
+                            border:          `1px solid ${BRAND_GREEN}44`,
+                            color:           BRAND_GREEN,
+                            fontWeight:      600,
                         }}
                     >
                         Runs In-Browser
                     </span>
                 </div>
 
+                {/* Right: model picker + load/unload + clear */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
 
-                    {/* ── Segmented execution backend bar ── */}
-                    <div
-                        style={{
-                            display: 'flex',
-                            gap: '4px',
-                            padding: '3px',
-                            backgroundColor: '#18191c',
-                            border: '1px solid #2a2c31',
-                            borderRadius: '20px',
-                        }}
-                    >
-                        {[
-                            { key: 'webllm', label: 'WebLLM', color: BRAND_GREEN },
-                            { key: 'inferis', label: 'inferis-ml', color: INFERIS_BLUE },
-                            { key: 'onnx', label: 'ONNX Web', color: ONNX_PURPLE },
-                        ].map((btn) => {
-                            const activeBtn = backend === btn.key;
-                            const isDisabled = btn.key !== 'onnx';
-                            return (
-                                <button
-                                    key={btn.key}
-                                    disabled={modelLoaded || isDisabled}
-                                    onClick={() => {
-                                        setBackend(btn.key as any);
-                                        if (btn.key === 'onnx') {
-                                            setModel('Kingman9407/hornet');
-                                        } else {
-                                            setModel('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
-                                        }
-                                    }}
-                                    style={{
-                                        border: 'none',
-                                        borderRadius: '16px',
-                                        backgroundColor: activeBtn ? btn.color : 'transparent',
-                                        color: activeBtn ? '#fff' : '#8e9297',
-                                        fontSize: '0.7rem',
-                                        fontWeight: 600,
-                                        padding: '4px 10px',
-                                        cursor: (modelLoaded || isDisabled) ? 'not-allowed' : 'pointer',
-                                        opacity: isDisabled ? 0.2 : (modelLoaded && !activeBtn ? 0.3 : 1),
-                                        transition: 'all 0.22s',
-                                    }}
-                                >
-                                    {btn.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* Model picker */}
+                    {/* ── Model Picker button ── */}
                     <div style={{ position: 'relative' }}>
                         <button
                             id="model-picker-btn"
-                            onClick={() => setShowModelPicker(v => !v)}
                             disabled={modelLoaded}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowPicker(v => !v);
+                            }}
                             style={{
-                                padding: '6px 12px',
-                                borderRadius: '8px',
-                                border: `1px solid ${backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN}55`,
+                                display:         'flex',
+                                alignItems:      'center',
+                                gap:             '7px',
+                                padding:         '6px 12px',
+                                borderRadius:    '10px',
+                                border:          `1px solid ${activeColor}55`,
                                 backgroundColor: '#18191c',
-                                color: '#f2f3f5',
-                                fontSize: '0.8rem',
-                                cursor: modelLoaded ? 'not-allowed' : 'pointer',
-                                opacity: modelLoaded ? 0.5 : 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
+                                color:           '#f2f3f5',
+                                fontSize:        '0.8rem',
+                                fontWeight:      600,
+                                cursor:          modelLoaded ? 'not-allowed' : 'pointer',
+                                opacity:         modelLoaded ? 0.6 : 1,
+                                transition:      'border-color 0.2s',
                             }}
                         >
-                            <span>{selectedModelInfo?.name ?? model}</span>
-                            <span style={{ color: backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN }}>▾</span>
+                            <span>{modelLabel.icon}</span>
+                            <span>{modelLabel.name}</span>
+                            <span style={{ color: activeColor, fontSize: '0.65rem' }}>▾</span>
                         </button>
 
-                        {showModelPicker && !modelLoaded && (
+                        {/* ── Dropdown ── */}
+                        {showPicker && !modelLoaded && (
                             <div
+                                onClick={e => e.stopPropagation()}
                                 style={{
-                                    position: 'absolute',
-                                    right: 0,
-                                    top: 'calc(100% + 6px)',
+                                    position:        'absolute',
+                                    right:           0,
+                                    top:             'calc(100% + 6px)',
                                     backgroundColor: '#18191c',
-                                    border: '1px solid #34363c',
-                                    borderRadius: '10px',
-                                    overflow: 'hidden',
-                                    zIndex: 50,
-                                    minWidth: '220px',
-                                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                                    border:          '1px solid #2a2c31',
+                                    borderRadius:    '12px',
+                                    overflow:        'hidden',
+                                    zIndex:          50,
+                                    minWidth:        '230px',
+                                    boxShadow:       '0 8px 28px rgba(0,0,0,0.55)',
                                 }}
                             >
-                                {currentModelsList.map(m => (
-                                    <button
-                                        key={m.id}
-                                        onClick={() => {
-                                            setModel(m.id);
-                                            setShowModelPicker(false);
-                                        }}
-                                        style={{
-                                            width: '100%',
-                                            padding: '10px 14px',
-                                            textAlign: 'left',
-                                            backgroundColor: m.id === model ? '#232428' : 'transparent',
-                                            border: 'none',
-                                            color: m.id === model ? (backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN) : '#b0b4bb',
-                                            fontSize: '0.85rem',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                        }}
-                                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#232428')}
-                                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = m.id === model ? '#232428' : 'transparent')}
-                                    >
-                                        <span>{m.name}</span>
-                                        <span
-                                            style={{
-                                                fontSize: '0.65rem',
-                                                padding: '1px 6px',
-                                                borderRadius: '999px',
-                                                backgroundColor: `${backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN}22`,
-                                                color: backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BRAND_GREEN,
-                                            }}
-                                        >
-                                            {m.tag}
+                                {/* inferis-ml option */}
+                                <button
+                                    id="picker-inferis"
+                                    onClick={() => handleChoiceChange('inferis')}
+                                    style={{
+                                        width:           '100%',
+                                        padding:         '12px 14px',
+                                        textAlign:       'left',
+                                        backgroundColor: choice === 'inferis' ? `${INFERIS_BLUE}15` : 'transparent',
+                                        border:          'none',
+                                        borderBottom:    '1px solid #2a2c31',
+                                        color:           choice === 'inferis' ? INFERIS_BLUE : '#b0b4bb',
+                                        cursor:          'pointer',
+                                        transition:      'background 0.15s',
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = `${INFERIS_BLUE}10`)}
+                                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = choice === 'inferis' ? `${INFERIS_BLUE}15` : 'transparent')}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                                        <span>⚡</span>
+                                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>inferis-ml</span>
+                                        <span style={{
+                                            marginLeft:      'auto',
+                                            fontSize:        '0.6rem',
+                                            fontWeight:      700,
+                                            padding:         '1px 6px',
+                                            borderRadius:    '99px',
+                                            backgroundColor: `${BRAND_GREEN}22`,
+                                            color:           BRAND_GREEN,
+                                        }}>
+                                            All Devices
                                         </span>
-                                    </button>
-                                ))}
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: '#6e7278', paddingLeft: '24px' }}>
+                                        Qwen 2.5 0.5B · WebGPU + WASM fallback
+                                    </div>
+                                </button>
+
+                                {/* Hornet option — shown for everyone, but greyed out on desktop */}
+                                <button
+                                    id="picker-hornet"
+                                    onClick={() => isMobile && handleChoiceChange('hornet')}
+                                    disabled={!isMobile}
+                                    style={{
+                                        width:           '100%',
+                                        padding:         '12px 14px',
+                                        textAlign:       'left',
+                                        backgroundColor: choice === 'hornet' ? `${HORNET_AMBER}15` : 'transparent',
+                                        border:          'none',
+                                        color:           !isMobile ? '#3a3c40' : choice === 'hornet' ? HORNET_AMBER : '#b0b4bb',
+                                        cursor:          !isMobile ? 'not-allowed' : 'pointer',
+                                        transition:      'background 0.15s',
+                                        opacity:         !isMobile ? 0.45 : 1,
+                                    }}
+                                    onMouseEnter={e => { if (isMobile) e.currentTarget.style.backgroundColor = `${HORNET_AMBER}10`; }}
+                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = choice === 'hornet' ? `${HORNET_AMBER}15` : 'transparent'; }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                                        <span>🐝</span>
+                                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Kingman Hornet</span>
+                                        <span style={{
+                                            marginLeft:      'auto',
+                                            fontSize:        '0.6rem',
+                                            fontWeight:      700,
+                                            padding:         '1px 6px',
+                                            borderRadius:    '99px',
+                                            backgroundColor: `${HORNET_AMBER}22`,
+                                            color:           HORNET_AMBER,
+                                        }}>
+                                            Mobile Only
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: '#6e7278', paddingLeft: '24px' }}>
+                                        135M · ONNX WASM · Fine-tuned SmolLM2
+                                    </div>
+                                </button>
                             </div>
                         )}
                     </div>
 
-                    {/* Load / Unload */}
+                    {/* ── Load / Unload ── */}
                     {!modelLoaded ? (
                         <button
                             id="load-model-btn"
-                            onClick={() => loadModel(model)}
+                            onClick={handleLoad}
                             style={{
                                 padding:         '6px 14px',
                                 borderRadius:    '8px',
-                                backgroundColor: backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BUTTON_GREEN,
                                 border:          'none',
+                                backgroundColor: activeColor,
                                 color:           '#fff',
                                 fontSize:        '0.8rem',
                                 fontWeight:      600,
                                 cursor:          'pointer',
                                 transition:      'background 0.2s',
+                                whiteSpace:      'nowrap',
                             }}
-                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = backend === 'onnx' ? ONNX_DARK : backend === 'inferis' ? INFERIS_DARK : BUTTON_HOVER)}
-                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = backend === 'onnx' ? ONNX_PURPLE : backend === 'inferis' ? INFERIS_BLUE : BUTTON_GREEN)}
+                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = activeColorDark)}
+                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = activeColor)}
                         >
-                            {backend === 'onnx' ? '🔮 Load (ONNX)' : backend === 'inferis' ? '⚡ Load (inferis-ml)' : 'Load Model'}
+                            {choice === 'hornet' ? '🐝 Load' : '⚡ Load'}
                         </button>
                     ) : (
                         <button
@@ -373,8 +379,8 @@ export default function ChatInterface() {
                             style={{
                                 padding:         '6px 14px',
                                 borderRadius:    '8px',
-                                backgroundColor: '#5f2a2a',
                                 border:          'none',
+                                backgroundColor: '#5f2a2a',
                                 color:           '#f2f3f5',
                                 fontSize:        '0.8rem',
                                 fontWeight:      600,
@@ -388,21 +394,21 @@ export default function ChatInterface() {
                         </button>
                     )}
 
-                    {/* Clear */}
+                    {/* ── Clear ── */}
                     {messages.length > 0 && (
                         <button
                             id="clear-chat-btn"
                             onClick={clearChat}
                             title="Clear chat"
                             style={{
-                                padding: '6px 10px',
-                                borderRadius: '8px',
+                                padding:         '6px 10px',
+                                borderRadius:    '8px',
                                 backgroundColor: '#18191c',
-                                border: '1px solid #34363c',
-                                color: '#b0b4bb',
-                                fontSize: '0.8rem',
-                                cursor: 'pointer',
-                                transition: 'border-color 0.2s, color 0.2s',
+                                border:          '1px solid #34363c',
+                                color:           '#b0b4bb',
+                                fontSize:        '0.8rem',
+                                cursor:          'pointer',
+                                transition:      'border-color 0.2s, color 0.2s',
                             }}
                             onMouseEnter={e => {
                                 e.currentTarget.style.borderColor = '#555';
@@ -419,32 +425,33 @@ export default function ChatInterface() {
                 </div>
             </header>
 
-            {/* ── Status bar ── */}
+            {/* ══════════════ STATUS BAR ══════════════ */}
             {status && (
                 <div
                     style={{
-                        padding: '6px 20px',
+                        padding:       '5px 20px',
                         backgroundColor: '#111214',
-                        borderBottom: '1px solid #1e2024',
-                        fontSize: '0.72rem',
-                        color: '#9ca0a8',
-                        fontFamily: 'var(--font-geist-mono, monospace)',
+                        borderBottom:  '1px solid #1e2024',
+                        fontSize:      '0.7rem',
+                        color:         status.startsWith('❌') ? '#ef4444' : status.startsWith('✅') ? BRAND_GREEN : '#9ca0a8',
+                        fontFamily:    'var(--font-geist-mono, monospace)',
                         letterSpacing: '0.02em',
+                        transition:    'color 0.2s',
                     }}
                 >
                     {status}
                 </div>
             )}
 
-            {/* ── Messages ── */}
+            {/* ══════════════ MESSAGES ══════════════ */}
             <main
                 style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    padding: '24px 16px',
-                    display: 'flex',
+                    flex:          1,
+                    overflowY:     'auto',
+                    padding:       '24px 16px',
+                    display:       'flex',
                     flexDirection: 'column',
-                    gap: '16px',
+                    gap:           '16px',
                     scrollbarWidth: 'thin',
                     scrollbarColor: '#34363c transparent',
                 }}
@@ -452,38 +459,36 @@ export default function ChatInterface() {
                 {messages.length === 0 && (
                     <div
                         style={{
-                            flex: 1,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
+                            flex:           1,
+                            display:        'flex',
+                            flexDirection:  'column',
+                            alignItems:     'center',
                             justifyContent: 'center',
-                            gap: '16px',
-                            opacity: 0.6,
-                            paddingBottom: '80px',
+                            gap:            '14px',
+                            opacity:        0.6,
+                            paddingBottom:  '80px',
                         }}
                     >
                         <div
                             style={{
-                                width: '60px',
-                                height: '60px',
-                                borderRadius: '50%',
-                                background: `radial-gradient(circle, ${BRAND_GREEN}30 0%, transparent 70%)`,
-                                border: `2px solid ${BRAND_GREEN}40`,
-                                display: 'flex',
-                                alignItems: 'center',
+                                width:          '60px',
+                                height:         '60px',
+                                borderRadius:   '50%',
+                                background:     `radial-gradient(circle, ${BRAND_GREEN}30 0%, transparent 70%)`,
+                                border:         `2px solid ${BRAND_GREEN}40`,
+                                display:        'flex',
+                                alignItems:     'center',
                                 justifyContent: 'center',
-                                fontSize: '1.8rem',
+                                fontSize:       '1.8rem',
                             }}
                         >
                             💬
                         </div>
                         <p style={{ color: '#b0b4bb', fontSize: '0.9rem', textAlign: 'center', maxWidth: '260px', margin: 0 }}>
-                            {modelLoaded
-                                ? 'Start typing to chat with the AI'
-                                : 'Load a model above to start chatting'}
+                            {modelLoaded ? 'Start typing to chat with the AI' : 'Load a model above to start chatting'}
                         </p>
                         {!modelLoaded && (
-                            <p style={{ color: '#555', fontSize: '0.75rem', textAlign: 'center', maxWidth: '280px', margin: 0 }}>
+                            <p style={{ color: '#555', fontSize: '0.72rem', textAlign: 'center', maxWidth: '280px', margin: 0 }}>
                                 All inference runs locally in your browser — no data is sent to any server.
                             </p>
                         )}
@@ -494,44 +499,50 @@ export default function ChatInterface() {
                     <div
                         key={msg.id}
                         style={{
-                            display: 'flex',
+                            display:    'flex',
                             justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
                             alignItems: 'flex-end',
-                            gap: '8px',
+                            gap:        '8px',
                         }}
                     >
+                        {/* Bot avatar */}
                         {msg.role === 'assistant' && (
                             <div
                                 style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    borderRadius: '50%',
-                                    background: `linear-gradient(135deg, ${BRAND_GREEN}40, ${BRAND_GREEN}20)`,
-                                    border: `1px solid ${BRAND_GREEN}55`,
-                                    display: 'flex',
-                                    alignItems: 'center',
+                                    width:          '28px',
+                                    height:         '28px',
+                                    borderRadius:   '50%',
+                                    background:     `linear-gradient(135deg, ${BRAND_GREEN}40, ${BRAND_GREEN}20)`,
+                                    border:         `1px solid ${BRAND_GREEN}55`,
+                                    display:        'flex',
+                                    alignItems:     'center',
                                     justifyContent: 'center',
-                                    fontSize: '0.85rem',
-                                    flexShrink: 0,
+                                    fontSize:       '0.85rem',
+                                    flexShrink:     0,
                                 }}
                             >
-                                🤖
+                                {choice === 'hornet' ? '🐝' : '⚡'}
                             </div>
                         )}
 
+                        {/* Bubble */}
                         <div
                             style={{
-                                maxWidth: '75%',
-                                padding: '10px 14px',
-                                borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                                backgroundColor: msg.role === 'user' ? `${BRAND_GREEN}22` : '#18191c',
-                                border: `1px solid ${msg.role === 'user' ? BRAND_GREEN + '40' : '#2a2c31'}`,
-                                fontSize: '0.9rem',
-                                lineHeight: '1.6',
-                                color: '#f2f3f5',
-                                whiteSpace: 'pre-wrap',
-                                wordBreak: 'break-word',
-                                position: 'relative',
+                                maxWidth:        '75%',
+                                padding:         '10px 14px',
+                                borderRadius:    msg.role === 'user'
+                                    ? '18px 18px 4px 18px'
+                                    : '18px 18px 18px 4px',
+                                backgroundColor: msg.role === 'user'
+                                    ? `${BRAND_GREEN}22`
+                                    : '#18191c',
+                                border:          `1px solid ${msg.role === 'user' ? BRAND_GREEN + '40' : '#2a2c31'}`,
+                                fontSize:        '0.9rem',
+                                lineHeight:      '1.6',
+                                color:           '#f2f3f5',
+                                whiteSpace:      'pre-wrap',
+                                wordBreak:       'break-word',
+                                position:        'relative',
                             }}
                         >
                             {msg.content || (msg.streaming && (
@@ -540,12 +551,12 @@ export default function ChatInterface() {
                                         <span
                                             key={i}
                                             style={{
-                                                width: '6px',
-                                                height: '6px',
-                                                borderRadius: '50%',
+                                                width:           '6px',
+                                                height:          '6px',
+                                                borderRadius:    '50%',
                                                 backgroundColor: BRAND_GREEN,
-                                                display: 'inline-block',
-                                                animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+                                                display:         'inline-block',
+                                                animation:       `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
                                             }}
                                         />
                                     ))}
@@ -554,31 +565,32 @@ export default function ChatInterface() {
                             {msg.streaming && msg.content && (
                                 <span
                                     style={{
-                                        display: 'inline-block',
-                                        width: '2px',
-                                        height: '1em',
+                                        display:         'inline-block',
+                                        width:           '2px',
+                                        height:          '1em',
                                         backgroundColor: BRAND_GREEN,
-                                        marginLeft: '2px',
-                                        verticalAlign: 'text-bottom',
-                                        animation: 'blink 0.8s step-end infinite',
+                                        marginLeft:      '2px',
+                                        verticalAlign:   'text-bottom',
+                                        animation:       'blink 0.8s step-end infinite',
                                     }}
                                 />
                             )}
                         </div>
 
+                        {/* User avatar */}
                         {msg.role === 'user' && (
                             <div
                                 style={{
-                                    width: '28px',
-                                    height: '28px',
-                                    borderRadius: '50%',
-                                    background: `linear-gradient(135deg, #3d5a80, #2c3e50)`,
-                                    border: '1px solid #3d5a8088',
-                                    display: 'flex',
-                                    alignItems: 'center',
+                                    width:          '28px',
+                                    height:         '28px',
+                                    borderRadius:   '50%',
+                                    background:     'linear-gradient(135deg, #3d5a80, #2c3e50)',
+                                    border:         '1px solid #3d5a8088',
+                                    display:        'flex',
+                                    alignItems:     'center',
                                     justifyContent: 'center',
-                                    fontSize: '0.85rem',
-                                    flexShrink: 0,
+                                    fontSize:       '0.85rem',
+                                    flexShrink:     0,
                                 }}
                             >
                                 👤
@@ -590,26 +602,26 @@ export default function ChatInterface() {
                 <div ref={messagesEndRef} />
             </main>
 
-            {/* ── Input area ── */}
+            {/* ══════════════ INPUT ══════════════ */}
             <footer
                 style={{
-                    padding: '12px 16px 20px',
-                    borderTop: '1px solid #1e2024',
+                    padding:         '12px 16px 20px',
+                    borderTop:       '1px solid #1e2024',
                     backgroundColor: '#0a0b0d',
                 }}
             >
                 <div
                     style={{
-                        maxWidth: '900px',
-                        margin: '0 auto',
-                        display: 'flex',
-                        gap: '8px',
-                        alignItems: 'flex-end',
+                        maxWidth:        '900px',
+                        margin:          '0 auto',
+                        display:         'flex',
+                        gap:             '8px',
+                        alignItems:      'flex-end',
                         backgroundColor: '#18191c',
-                        border: `1px solid ${modelLoaded ? BRAND_GREEN + '44' : '#34363c'}`,
-                        borderRadius: '14px',
-                        padding: '8px 8px 8px 14px',
-                        transition: 'border-color 0.2s',
+                        border:          `1px solid ${modelLoaded ? activeColor + '44' : '#34363c'}`,
+                        borderRadius:    '14px',
+                        padding:         '8px 8px 8px 14px',
+                        transition:      'border-color 0.2s',
                     }}
                 >
                     <textarea
@@ -628,16 +640,16 @@ export default function ChatInterface() {
                         disabled={!modelLoaded || isGenerating}
                         rows={1}
                         style={{
-                            flex: 1,
+                            flex:       1,
                             background: 'transparent',
-                            border: 'none',
-                            outline: 'none',
-                            color: '#f2f3f5',
-                            fontSize: '0.9rem',
-                            resize: 'none',
+                            border:     'none',
+                            outline:    'none',
+                            color:      '#f2f3f5',
+                            fontSize:   '0.9rem',
+                            resize:     'none',
                             lineHeight: '1.5',
-                            maxHeight: '160px',
-                            overflow: 'auto',
+                            maxHeight:  '160px',
+                            overflow:   'auto',
                             fontFamily: 'inherit',
                         }}
                     />
@@ -646,19 +658,19 @@ export default function ChatInterface() {
                         onClick={sendMessage}
                         disabled={!modelLoaded || isGenerating || !input.trim()}
                         style={{
-                            width: '36px',
-                            height: '36px',
-                            borderRadius: '8px',
-                            flexShrink: 0,
+                            width:           '36px',
+                            height:          '36px',
+                            borderRadius:    '8px',
+                            flexShrink:      0,
                             backgroundColor: modelLoaded && input.trim() && !isGenerating ? BUTTON_GREEN : '#232428',
-                            border: 'none',
-                            color: modelLoaded && input.trim() && !isGenerating ? '#fff' : '#555',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: modelLoaded && input.trim() && !isGenerating ? 'pointer' : 'not-allowed',
-                            fontSize: '1rem',
-                            transition: 'background 0.2s, color 0.2s',
+                            border:          'none',
+                            color:           modelLoaded && input.trim() && !isGenerating ? '#fff' : '#555',
+                            display:         'flex',
+                            alignItems:      'center',
+                            justifyContent:  'center',
+                            cursor:          modelLoaded && input.trim() && !isGenerating ? 'pointer' : 'not-allowed',
+                            fontSize:        '1rem',
+                            transition:      'background 0.2s, color 0.2s',
                         }}
                         onMouseEnter={e => {
                             if (modelLoaded && input.trim() && !isGenerating)
@@ -672,19 +684,12 @@ export default function ChatInterface() {
                         ↑
                     </button>
                 </div>
-                <p
-                    style={{
-                        textAlign: 'center',
-                        fontSize: '0.68rem',
-                        color: '#555',
-                        marginTop: '8px',
-                    }}
-                >
-                    AI runs on your device via WebGPU · No data sent to servers
+                <p style={{ textAlign: 'center', fontSize: '0.65rem', color: '#555', marginTop: '8px' }}>
+                    AI runs on your device · No data sent to servers
                 </p>
             </footer>
 
-            {/* ── Keyframe animations ── */}
+            {/* ══════════════ KEYFRAMES ══════════════ */}
             <style>{`
                 @keyframes bounce {
                     0%, 60%, 100% { transform: translateY(0); }
