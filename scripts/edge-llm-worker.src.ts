@@ -16,9 +16,9 @@ interface ModelConfig {
 
 const MODEL_CONFIGS: Record<string, ModelConfig> = {
   "Kingman9407/hornet": {
-    modelUrl: "https://huggingface.co/Kingman9407/hornet/resolve/main/model.onnx",
+    modelUrl: "https://huggingface.co/Kingman9407/hornet/resolve/main/onnx/untrained/model.onnx",
     tokenizerRepo: "Kingman9407/hornet",
-    idbKey: "kingman-hornet-v1",
+    idbKey: "kingman-hornet-untrained-v1",
     knownBytes: 137452646,
   },
   "onnx-community/SmolLM2-135M-Instruct": {

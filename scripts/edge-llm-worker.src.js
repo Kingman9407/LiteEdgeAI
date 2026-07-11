@@ -33,9 +33,9 @@ const HF_TOKEN = (typeof __HF_TOKEN__ !== 'undefined' && __HF_TOKEN__) ? __HF_TO
 const MODEL_CONFIGS = {
   'Kingman9407/hornet': {
     repo: 'Kingman9407/hornet',
-    file: 'model.onnx',
+    file: 'onnx/untrained/model.onnx',
     knownBytes: 137_452_646,
-    idbKey: 'kingman-hornet-v1',
+    idbKey: 'kingman-hornet-untrained-v1',
   },
   'onnx-community/SmolLM2-135M-Instruct': {
     repo: 'onnx-community/SmolLM2-135M-Instruct',
