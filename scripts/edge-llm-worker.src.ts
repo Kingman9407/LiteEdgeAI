@@ -153,43 +153,75 @@ async function cacheModel(buffer: ArrayBuffer, idbKey: string): Promise<void> {
 async function loadModel(modelId?: string) {
   const config = MODEL_CONFIGS[modelId ?? DEFAULT_MODEL_ID] ?? MODEL_CONFIGS[DEFAULT_MODEL_ID];
 
+  console.group(`[EdgeLLM Worker] ══ loadModel("${modelId ?? DEFAULT_MODEL_ID}") ══`);
+  console.log("[EdgeLLM Worker] 📋 Config:", JSON.stringify(config, null, 2));
+  console.log("[EdgeLLM Worker] 🖥️  User-Agent:", navigator.userAgent);
+  console.log("[EdgeLLM Worker] 💻 Hardware concurrency:", navigator.hardwareConcurrency);
+  console.log("[EdgeLLM Worker] 🌐 Worker origin:", self.location.origin);
+  console.log("[EdgeLLM Worker] 🔧 SharedArrayBuffer available:", typeof SharedArrayBuffer !== "undefined");
+  console.log("[EdgeLLM Worker] 🔧 Atomics available:", typeof Atomics !== "undefined");
+  console.log("[EdgeLLM Worker] 🔧 WebGPU available:", "gpu" in navigator);
+
   // ── Build proxy URL — routes through Next.js /api/model which:
   //   1. Attaches HF_TOKEN server-side (no token in client bundle)
   //   2. Emits Cross-Origin-Resource-Policy: same-origin (required for SharedArrayBuffer on mobile)
   //   3. Handles 302 redirects to CDN without leaking the auth token
   const proxyUrl = `/api/model?repo=${encodeURIComponent(config.repo)}&file=${encodeURIComponent(config.file)}`;
+  console.log("[EdgeLLM Worker] 🔗 Proxy URL:", proxyUrl);
 
   self.postMessage({ type: "STATUS", status: "downloading", progress: 0 });
 
   let modelBuffer: ArrayBuffer;
 
   // ── Try IndexedDB cache first ──────────────────────────────────────────────
+  console.log(`[EdgeLLM Worker] 🗄️  Checking IndexedDB cache for key: "${config.idbKey}"...`);
+  const idbStart = performance.now();
   const cached = await getCachedModel(config.idbKey);
+  const idbElapsed = (performance.now() - idbStart).toFixed(0);
   if (cached) {
     console.log(
-      `[EdgeLLM Worker] ✅ Loaded model from IndexedDB cache ` +
+      `[EdgeLLM Worker] ✅ Cache HIT! Loaded from IndexedDB in ${idbElapsed}ms ` +
       `(${(cached.byteLength / 1024 / 1024).toFixed(1)} MB)`
     );
     modelBuffer = cached;
     self.postMessage({ type: "STATUS", status: "downloading", progress: 1 });
   } else {
+    console.log(`[EdgeLLM Worker] ❌ Cache MISS (${idbElapsed}ms). Will fetch from network.`);
     // ── Fetch via local proxy (same method as aai_trainer) ────────────────────
-    console.log("[EdgeLLM Worker] Fetching model via proxy:", proxyUrl);
+    console.log("[EdgeLLM Worker] 🌐 Sending fetch to proxy...");
+    const fetchStart = performance.now();
 
     const response = await fetch(proxyUrl, {
       // no-store skips the browser HTTP cache — we manage caching via IndexedDB
       cache: "no-store",
     });
 
+    const fetchHeaderTime = (performance.now() - fetchStart).toFixed(0);
+    console.log(`[EdgeLLM Worker] 📡 Proxy response received in ${fetchHeaderTime}ms`);
+    console.log(`[EdgeLLM Worker]    Status: ${response.status} ${response.statusText}`);
+    console.log(`[EdgeLLM Worker]    Headers:`, Object.fromEntries(response.headers.entries()));
+
     if (!response.ok) {
-      console.error("[EdgeLLM Worker] HuggingFace fetch failed:", response.status, response.statusText);
+      console.error(`[EdgeLLM Worker] ❌ Fetch FAILED — Status ${response.status} ${response.statusText}`);
+      console.error("[EdgeLLM Worker]    This usually means:");
+      console.error("[EdgeLLM Worker]    • 401: HF_TOKEN is missing, expired, or lacks repo access");
+      console.error("[EdgeLLM Worker]    • 404: File path is wrong — check repo file structure");
+      console.error("[EdgeLLM Worker]    • 403: Token lacks read permission for this repo");
+      console.error("[EdgeLLM Worker]    • 500: Server-side HF_TOKEN env var not loaded by Next.js");
+      const body = await response.text().catch(() => "(could not read body)");
+      console.error("[EdgeLLM Worker]    Response body:", body);
       throw new Error(`HuggingFace fetch error: ${response.status} ${response.statusText}`);
     }
-    if (!response.body) throw new Error("Response body is null.");
+    if (!response.body) {
+      console.error("[EdgeLLM Worker] ❌ Response body is null — cannot stream download");
+      throw new Error("Response body is null.");
+    }
 
     const headerLen = Number(response.headers.get("content-length") ?? 0);
     const contentLength = headerLen > 0 ? headerLen : config.knownBytes;
-    console.log("[EdgeLLM Worker] Starting stream download. Expected size:", contentLength, "bytes");
+    console.log(`[EdgeLLM Worker] 📦 Content-Length: ${headerLen > 0 ? `${(headerLen/1024/1024).toFixed(1)} MB (from header)` : `${(config.knownBytes/1024/1024).toFixed(1)} MB (estimated — header missing)`}`);
+    console.log("[EdgeLLM Worker] 📥 Starting stream download...");
+    const downloadStart = performance.now();
 
     const reader = response.body.getReader();
     let received = 0;
@@ -224,11 +256,15 @@ async function loadModel(modelId?: string) {
       }
 
       // Trim only if actual payload was smaller than the declared content-length
+      if (writeOffset < contentLength) {
+        console.warn(`[EdgeLLM Worker] ⚠️  Received ${writeOffset} bytes but expected ${contentLength} — trimming buffer.`);
+      }
       modelBuffer = writeOffset < contentLength
         ? merged.buffer.slice(0, writeOffset)
         : merged.buffer;
     } else {
       // Fallback: chunk accumulation when content-length is unknown
+      console.warn("[EdgeLLM Worker] ⚠️  No Content-Length header — using chunk accumulation (2× peak RAM)");
       const chunks: Uint8Array[] = [];
       while (true) {
         const { done, value } = await reader.read();
@@ -253,22 +289,32 @@ async function loadModel(modelId?: string) {
       modelBuffer = merged.buffer;
     }
 
+    const downloadElapsed = ((performance.now() - downloadStart) / 1000).toFixed(2);
+    const speedMBps = (received / 1024 / 1024 / parseFloat(downloadElapsed)).toFixed(2);
     console.log(
-      `[EdgeLLM Worker] Download complete. ` +
-      `Size: ${(received / 1024 / 1024).toFixed(1)} MB`
+      `[EdgeLLM Worker] ✅ Download complete in ${downloadElapsed}s — ` +
+      `${(received / 1024 / 1024).toFixed(1)} MB @ ~${speedMBps} MB/s`
     );
 
     // Cache for next time (non-blocking, non-fatal)
-    cacheModel(modelBuffer, config.idbKey).catch(() => {/* intentionally swallowed */});
+    console.log(`[EdgeLLM Worker] 🗄️  Writing model to IndexedDB cache (key: "${config.idbKey}")...`);
+    cacheModel(modelBuffer, config.idbKey)
+      .then(() => console.log("[EdgeLLM Worker] 🗄️  ✅ Model cached in IndexedDB successfully!"))
+      .catch((err) => console.warn("[EdgeLLM Worker] 🗄️  ⚠️  IndexedDB cache write failed (non-fatal):", err));
   }
 
   self.postMessage({ type: "STATUS", status: "loading", progress: 1 });
 
   // Fix #3: Assign to module-level variable — generate() reuses this reference
+  const ortImportStart = performance.now();
   if ("gpu" in navigator) {
+    console.log("[EdgeLLM Worker] 🖥️  WebGPU detected — importing onnxruntime-web/webgpu...");
     ort = (await import("onnxruntime-web/webgpu")) as any;
+    console.log(`[EdgeLLM Worker] ✅ ORT WebGPU imported in ${(performance.now() - ortImportStart).toFixed(0)}ms`);
   } else {
+    console.log("[EdgeLLM Worker] 🔧 No WebGPU — importing onnxruntime-web (WASM only)...");
     ort = await import("onnxruntime-web");
+    console.log(`[EdgeLLM Worker] ✅ ORT WASM imported in ${(performance.now() - ortImportStart).toFixed(0)}ms`);
   }
 
   const hardwareConcurrency = navigator.hardwareConcurrency ?? 1;
@@ -285,7 +331,10 @@ async function loadModel(modelId?: string) {
       0x0a, 0x0a, 0x01, 0x08, 0x00, 0xfd, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x0b,
     ]);
     simdOk = WebAssembly.validate(probe);
-  } catch { /* ignore */ }
+    console.log(`[EdgeLLM Worker] 🔬 WASM SIMD probe: ${simdOk ? "✅ SUPPORTED" : "❌ NOT supported"}`);
+  } catch (simdErr) {
+    console.warn("[EdgeLLM Worker] ⚠️  WASM SIMD probe threw — assuming not supported:", simdErr);
+  }
 
   const canMultiThread = hasSharedArrayBuffer && hasAtomics;
   // Fix #4: Cap at physical-core estimate and a hard maximum of 4.
@@ -302,6 +351,14 @@ async function loadModel(modelId?: string) {
     `(hw: ${hardwareConcurrency}), SIMD: ${simdOk}, SAB: ${canMultiThread}`
   );
 
+  console.group("[EdgeLLM Worker] ── WASM/ORT Environment");
+  console.log("[EdgeLLM Worker]  • SIMD:", simdOk);
+  console.log("[EdgeLLM Worker]  • SharedArrayBuffer:", hasSharedArrayBuffer);
+  console.log("[EdgeLLM Worker]  • Atomics:", hasAtomics);
+  console.log("[EdgeLLM Worker]  • MultiThread:", canMultiThread);
+  console.log("[EdgeLLM Worker]  • Threads to use:", numThreads, `(of ${hardwareConcurrency} logical cores)`);
+  console.groupEnd();
+
   ort.env.wasm.proxy = false; // Already inside a Worker — no need for a proxy worker
   ort.env.wasm.numThreads = numThreads;
   ort.env.wasm.simd = simdOk;
@@ -309,26 +366,33 @@ async function loadModel(modelId?: string) {
   // Pointing at self.location.origin caused failures on mobile because the
   // Next.js dev server doesn't reliably serve the ORT WASM files.
   ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
+  console.log("[EdgeLLM Worker] 🔧 ORT WASM paths set to:", ort.env.wasm.wasmPaths);
 
   let providers: string[] = ["wasm"];
   if ("gpu" in navigator) {
     providers = ["webgpu", "wasm"];
   }
+  console.log("[EdgeLLM Worker] 🧠 Execution providers:", providers);
 
   try {
-    console.log(`[EdgeLLM Worker] Creating ONNX session (attempt 1) with providers: ${providers.join(", ")}`);
+    console.log(`[EdgeLLM Worker] ⚙️  Creating ONNX session (attempt 1) with providers: [${providers.join(", ")}]...`);
+    const sessionStart = performance.now();
     session = await ort.InferenceSession.create(modelBuffer, {
       executionProviders: providers,
       graphOptimizationLevel: "all",
     });
+    console.log(`[EdgeLLM Worker] ✅ ONNX session created in ${(performance.now() - sessionStart).toFixed(0)}ms (attempt 1)`);
   } catch (err) {
-    console.error("[EdgeLLM Worker] Session attempt 1 failed, retrying with fallback settings:", err);
+    console.error("[EdgeLLM Worker] ❌ Session attempt 1 FAILED:", err);
+    console.warn("[EdgeLLM Worker] 🔄 Retrying with single-thread WASM fallback (numThreads=1, simd=false)...");
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.simd = false;
+    const fallbackStart = performance.now();
     session = await ort.InferenceSession.create(modelBuffer, {
       executionProviders: ["wasm"],
       graphOptimizationLevel: "basic",
     });
+    console.log(`[EdgeLLM Worker] ✅ ONNX session created in ${(performance.now() - fallbackStart).toFixed(0)}ms (fallback)`);
   }
 
   // ── Tokenizer loading (via /api/hf-proxy — same method as aai_trainer) ──────
@@ -336,28 +400,41 @@ async function loadModel(modelId?: string) {
   // tokenizer JSON files under COEP (require-corp). Without this, iOS Safari
   // blocks the cross-origin tokenizer fetch and initialization fails.
   const PROXY_BASE = `${self.location.origin}/api/hf-proxy/`;
-  console.log("[EdgeLLM Worker] Loading tokenizer via proxy:", PROXY_BASE + config.tokenizerRepo);
+  console.log("[EdgeLLM Worker] 🔤 Loading tokenizer via proxy:", PROXY_BASE + config.tokenizerRepo);
+  const tokenizerStart = performance.now();
   const { AutoTokenizer, env } = await import("@huggingface/transformers");
 
   env.remoteHost = PROXY_BASE;
   env.allowRemoteModels = true;
   env.useBrowserCache = true; // cache tokenizer files in the browser cache
+  console.log("[EdgeLLM Worker] 🔤 HF Transformers env:", { remoteHost: env.remoteHost, allowRemoteModels: env.allowRemoteModels, useBrowserCache: env.useBrowserCache });
 
   try {
     tokenizer = await AutoTokenizer.from_pretrained(config.tokenizerRepo);
     eosTokenId = Number(tokenizer.eos_token_id ?? FALLBACK_EOS_TOKEN_ID);
-    console.log("[EdgeLLM Worker] ✅ Tokenizer loaded! EOS token id:", eosTokenId);
+    console.log(`[EdgeLLM Worker] ✅ Tokenizer loaded in ${(performance.now() - tokenizerStart).toFixed(0)}ms`);
+    console.log("[EdgeLLM Worker] 🔤 Tokenizer type:", tokenizer.constructor?.name);
+    console.log("[EdgeLLM Worker] 🔤 EOS token id:", eosTokenId);
+    console.log("[EdgeLLM Worker] 🔤 BOS token id:", tokenizer.bos_token_id);
+    console.log("[EdgeLLM Worker] 🔤 Vocab size:", tokenizer.model?.vocab_size ?? "(unknown)");
   } catch (err) {
-    console.error("[EdgeLLM Worker] ❌ Tokenizer failed:", err);
+    console.error("[EdgeLLM Worker] ❌ Tokenizer load FAILED:", err);
+    console.error("[EdgeLLM Worker]    Check that the proxy /api/hf-proxy/ is working and CORS headers are present");
     throw err;
   }
 
   // Surface model capability so the generate() path selection is visible in logs
-  const hasKvOutputs = session.outputNames.some(n => n.startsWith("present_key_values."));
-  console.log("[EdgeLLM Worker] Model inputs:", session.inputNames);
-  console.log("[EdgeLLM Worker] Model outputs:", session.outputNames);
-  console.log(`[EdgeLLM Worker] KV-cache capable: ${hasKvOutputs}`);
+  const hasKvOutputs = session.outputNames.some((n: string) => n.startsWith("present_key_values."));
+  const hasKvInputs = session.inputNames.some((n: string) => n.startsWith("past_key_values."));
+  console.group("[EdgeLLM Worker] ── ONNX Session Capabilities");
+  console.log("[EdgeLLM Worker]  • Input names:", session.inputNames);
+  console.log("[EdgeLLM Worker]  • Output names:", session.outputNames);
+  console.log("[EdgeLLM Worker]  • KV-cache outputs:", hasKvOutputs);
+  console.log("[EdgeLLM Worker]  • KV-cache inputs:", hasKvInputs);
+  console.log("[EdgeLLM Worker]  • Generation path:", hasKvOutputs && hasKvInputs ? "✅ O(N) KV-cache" : "⚠️  O(N²) full-refeed fallback");
+  console.groupEnd();
 
+  console.groupEnd(); // close ══ loadModel() ══
   self.postMessage({ type: "STATUS", status: "ready", progress: 1 });
 }
 
@@ -375,7 +452,8 @@ async function generateWithKvCache(
   initialInputIds: number[],
   generatedTokenIds: number[]
 ): Promise<void> {
-  if (!session || !ort) return;
+  if (!session || !ort) { console.error("[EdgeLLM Worker] ❌ generateWithKvCache called but session/ort is null!"); return; }
+  console.log(`[EdgeLLM Worker] [KV-cache] Prefill — prompt length: ${initialInputIds.length} tokens`);
 
   const promptLen = initialInputIds.length;
   const kvInputNames = session.inputNames.filter(n => n.startsWith("past_key_values."));
@@ -494,7 +572,8 @@ async function generateFullRefeed(
   inputIds: number[],
   generatedTokenIds: number[]
 ): Promise<void> {
-  if (!session || !ort) return;
+  if (!session || !ort) { console.error("[EdgeLLM Worker] ❌ generateFullRefeed called but session/ort is null!"); return; }
+  console.warn(`[EdgeLLM Worker] [Full-refeed] Using O(N²) path. Prompt length: ${inputIds.length} tokens. Consider exporting KV-cache outputs from the model.`);
 
   const kvInputNames = session.inputNames.filter(n => n.startsWith("past_key_values."));
   const emptyKvShape = [1, 3, 0, 64];
@@ -553,8 +632,10 @@ async function generateFullRefeed(
 
 async function generate(prompt: string | ChatMLMessage[], reqId: number) {
   if (!session || !tokenizer || !ort) {
+    console.error("[EdgeLLM Worker] ❌ generate() called but model is not loaded! session:", !!session, "tokenizer:", !!tokenizer, "ort:", !!ort);
     throw new Error("Model is not loaded yet.");
   }
+  console.log(`[EdgeLLM Worker] 💬 generate() called — reqId: ${reqId}, prompt type: ${Array.isArray(prompt) ? "ChatML messages" : "raw string"}`);
 
   let promptText = "";
   if (Array.isArray(prompt)) {
@@ -612,22 +693,30 @@ async function generate(prompt: string | ChatMLMessage[], reqId: number) {
 
 // ─── Message handler ──────────────────────────────────────────────────────────
 
+console.log("[EdgeLLM Worker] 🚀 Worker script loaded and initialized. Listening for messages...");
+
 self.addEventListener("message", (e) => {
   const { type, payload } = e.data;
+  console.log(`[EdgeLLM Worker] 📨 Received message: type=${type}`, payload ? `payload=${JSON.stringify(payload).slice(0, 200)}` : "");
 
   if (type === "LOAD") {
     loadModel(payload?.modelId).catch((err) => {
+      console.error("[EdgeLLM Worker] ❌ loadModel() threw:", err);
       self.postMessage({ type: "ERROR", error: err.message || String(err) });
     });
   } else if (type === "GENERATE") {
     generate(payload.prompt, payload.reqId).catch((err) => {
+      console.error(`[EdgeLLM Worker] ❌ generate() threw (reqId: ${payload.reqId}):`, err);
       self.postMessage({ type: "ERROR", error: err.message || String(err), reqId: payload.reqId });
     });
   } else if (type === "RESET") {
+    console.log("[EdgeLLM Worker] 🔄 RESET received — clearing session, tokenizer, and ort.");
     session = null;
     tokenizer = null;
     ort = null;
     eosTokenId = FALLBACK_EOS_TOKEN_ID;
     self.postMessage({ type: "STATUS", status: "idle", progress: 0 });
+  } else {
+    console.warn(`[EdgeLLM Worker] ⚠️  Unknown message type received: "${type}"`);
   }
 });
