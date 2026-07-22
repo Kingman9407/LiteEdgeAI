@@ -88,22 +88,21 @@ export function ModelSelector({
                     </p>
                 </button>
 
-                {/* ── Hornet card (mobile only — hidden on desktop) ── */}
+                {/* ── Hornet card (all devices) ── */}
                 <button
                     id="model-card-hornet"
-                    disabled={modelLoaded || !isMobile}
+                    disabled={modelLoaded}
                     onClick={() => setChoice('hornet')}
                     style={{
                         padding: '14px 16px',
                         borderRadius: '10px',
                         border: `2px solid ${choice === 'hornet' ? HORNET_AMBER : '#2a2c31'}`,
                         backgroundColor: choice === 'hornet' ? `${HORNET_AMBER}12` : '#111214',
-                        cursor: (modelLoaded || !isMobile) ? 'not-allowed' : 'pointer',
-                        opacity: !isMobile ? 0.35 : modelLoaded && choice !== 'hornet' ? 0.4 : 1,
+                        cursor: modelLoaded ? 'not-allowed' : 'pointer',
+                        opacity: modelLoaded && choice !== 'hornet' ? 0.4 : 1,
                         textAlign: 'left',
                         transition: 'all 0.2s ease',
                         boxShadow: choice === 'hornet' ? `0 0 16px ${HORNET_AMBER}28` : 'none',
-                        display: isMobile ? undefined : 'none', // hidden on desktop
                     }}
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
@@ -122,7 +121,7 @@ export function ModelSelector({
                             textTransform: 'uppercase',
                             letterSpacing: '0.06em',
                         }}>
-                            Mobile Only
+                            All Devices
                         </span>
                     </div>
                     <p style={{ fontSize: '0.72rem', color: '#9ca0a8', margin: 0, lineHeight: 1.5 }}>

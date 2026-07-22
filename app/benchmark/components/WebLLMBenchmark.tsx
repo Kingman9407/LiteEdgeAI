@@ -72,7 +72,7 @@ export default function WebLLMBenchmark() {
             screen:       `${window.screen.width} × ${window.screen.height}`,
         });
 
-        // On mobile, default to hornet; on desktop, force inferis
+        // On mobile, default to hornet; on desktop, default to inferis
         if (mobile) {
             setChoice('hornet');
         } else {

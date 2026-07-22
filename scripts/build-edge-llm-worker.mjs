@@ -43,7 +43,7 @@ const publicDir = resolve(rootDir, 'public');
 await build({
   // Use entryPoints as a map so we control the output filename exactly
   entryPoints: {
-    'edge-llm.worker': resolve(__dirname, 'edge-llm-worker.src.js'),
+    'edge-llm.worker': resolve(__dirname, 'edge-llm-worker.src.ts'),
   },
   outdir:   publicDir,
   bundle:   true,

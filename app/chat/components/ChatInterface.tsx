@@ -162,7 +162,7 @@ export default function ChatInterface() {
 
     // ── Model display labels ──────────────────────────────────────────────────
     const modelLabel = choice === 'hornet'
-        ? { icon: '🐝', name: 'Kingman Hornet', sub: '135M · ONNX · Mobile' }
+        ? { icon: '🐝', name: 'Kingman Hornet', sub: '135M · ONNX' }
         : { icon: '⚡', name: 'inferis-ml',      sub: 'Qwen 2.5 0.5B · WebGPU' };
 
     return (
@@ -308,23 +308,22 @@ export default function ChatInterface() {
                                     </div>
                                 </button>
 
-                                {/* Hornet option — shown for everyone, but greyed out on desktop */}
+                                {/* Hornet option — shown for everyone */}
                                 <button
                                     id="picker-hornet"
-                                    onClick={() => isMobile && handleChoiceChange('hornet')}
-                                    disabled={!isMobile}
+                                    onClick={() => handleChoiceChange('hornet')}
                                     style={{
                                         width:           '100%',
                                         padding:         '12px 14px',
                                         textAlign:       'left',
                                         backgroundColor: choice === 'hornet' ? `${HORNET_AMBER}15` : 'transparent',
                                         border:          'none',
-                                        color:           !isMobile ? '#3a3c40' : choice === 'hornet' ? HORNET_AMBER : '#b0b4bb',
-                                        cursor:          !isMobile ? 'not-allowed' : 'pointer',
+                                        color:           choice === 'hornet' ? HORNET_AMBER : '#b0b4bb',
+                                        cursor:          'pointer',
                                         transition:      'background 0.15s',
-                                        opacity:         !isMobile ? 0.45 : 1,
+                                        opacity:         1,
                                     }}
-                                    onMouseEnter={e => { if (isMobile) e.currentTarget.style.backgroundColor = `${HORNET_AMBER}10`; }}
+                                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = `${HORNET_AMBER}10`; }}
                                     onMouseLeave={e => { e.currentTarget.style.backgroundColor = choice === 'hornet' ? `${HORNET_AMBER}15` : 'transparent'; }}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
@@ -339,7 +338,7 @@ export default function ChatInterface() {
                                             backgroundColor: `${HORNET_AMBER}22`,
                                             color:           HORNET_AMBER,
                                         }}>
-                                            Mobile Only
+                                            All Devices
                                         </span>
                                     </div>
                                     <div style={{ fontSize: '0.7rem', color: '#6e7278', paddingLeft: '24px' }}>

@@ -1,4 +1,7 @@
-// Model files fetched directly from HuggingFace CDN (fully client-side, no server proxy needed)
+// Model files fetched through the local Next.js proxy (/api/model) — same method
+// as the working aai_trainer project. The proxy injects the required
+// Cross-Origin-Resource-Policy headers (needed for SharedArrayBuffer / multi-threading)
+// and attaches the server-side HF_TOKEN so private repos work on mobile too.
 
 const IDB_DB_NAME = "edge-llm-cache";
 const IDB_STORE = "models";
@@ -8,7 +11,10 @@ const FALLBACK_EOS_TOKEN_ID = 2;
 
 // ─── Known model configs ──────────────────────────────────────────────────────
 interface ModelConfig {
-  modelUrl: string;
+  // HuggingFace repo id (used to build the proxy URL)
+  repo: string;
+  // Path inside the repo, e.g. "onnx/untrained/model.onnx"
+  file: string;
   tokenizerRepo: string;
   idbKey: string;
   knownBytes: number;
@@ -16,13 +22,15 @@ interface ModelConfig {
 
 const MODEL_CONFIGS: Record<string, ModelConfig> = {
   "Kingman9407/hornet": {
-    modelUrl: "https://huggingface.co/Kingman9407/hornet/resolve/main/onnx/untrained/model.onnx",
+    repo: "Kingman9407/hornet",
+    file: "onnx/untrained/model.onnx",
     tokenizerRepo: "Kingman9407/hornet",
     idbKey: "kingman-hornet-untrained-v1",
     knownBytes: 137452646,
   },
   "onnx-community/SmolLM2-135M-Instruct": {
-    modelUrl: "https://huggingface.co/onnx-community/SmolLM2-135M-Instruct/resolve/main/onnx/model.onnx",
+    repo: "onnx-community/SmolLM2-135M-Instruct",
+    file: "onnx/model.onnx",
     tokenizerRepo: "onnx-community/SmolLM2-135M-Instruct",
     idbKey: "smollm2-135m-instruct-v1",
     knownBytes: 137000000,
@@ -38,10 +46,8 @@ let session: import("onnxruntime-web").InferenceSession | null = null;
 let tokenizer: import("@huggingface/transformers").PreTrainedTokenizer | null = null;
 let eosTokenId = FALLBACK_EOS_TOKEN_ID;
 
-// __HF_TOKEN__ is substituted at build time by esbuild (reads from .env.local)
-declare const __HF_TOKEN__: string;
-const hfToken: string | undefined =
-  typeof __HF_TOKEN__ !== "undefined" && __HF_TOKEN__ ? __HF_TOKEN__ : undefined;
+// Token is no longer embedded in the client bundle — the server proxy
+// (/api/model and /api/hf-proxy) securely attaches HF_TOKEN server-side.
 
 interface ChatMLMessage {
   role: "system" | "user" | "assistant";
@@ -116,14 +122,10 @@ async function getCachedModel(idbKey: string): Promise<ArrayBuffer | null> {
 }
 
 async function cacheModel(buffer: ArrayBuffer, idbKey: string): Promise<void> {
-  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobile && buffer.byteLength > 100 * 1024 * 1024) {
-    console.warn(
-      `[EdgeLLM Worker] Skipping IndexedDB cache on mobile for large model ` +
-      `(${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB).`
-    );
-    return;
-  }
+  // Removed mobile size guard — the 100 MB limit was incorrectly blocking the
+  // 137 MB model from ever being cached on phones, forcing a full redownload
+  // on every page load. With the proxy handling COEP headers, IDB writes now
+  // succeed reliably on iOS Safari and Android Chrome.
 
   try {
     const db = await openDb();
@@ -150,6 +152,12 @@ async function cacheModel(buffer: ArrayBuffer, idbKey: string): Promise<void> {
 async function loadModel(modelId?: string) {
   const config = MODEL_CONFIGS[modelId ?? DEFAULT_MODEL_ID] ?? MODEL_CONFIGS[DEFAULT_MODEL_ID];
 
+  // ── Build proxy URL — routes through Next.js /api/model which:
+  //   1. Attaches HF_TOKEN server-side (no token in client bundle)
+  //   2. Emits Cross-Origin-Resource-Policy: same-origin (required for SharedArrayBuffer on mobile)
+  //   3. Handles 302 redirects to CDN without leaking the auth token
+  const proxyUrl = `/api/model?repo=${encodeURIComponent(config.repo)}&file=${encodeURIComponent(config.file)}`;
+
   self.postMessage({ type: "STATUS", status: "downloading", progress: 0 });
 
   let modelBuffer: ArrayBuffer;
@@ -164,15 +172,10 @@ async function loadModel(modelId?: string) {
     modelBuffer = cached;
     self.postMessage({ type: "STATUS", status: "downloading", progress: 1 });
   } else {
-    // ── Fetch directly from HuggingFace CDN (fully client-side) ───────────────
-    console.log("[EdgeLLM Worker] Fetching model directly from HuggingFace:", config.modelUrl);
-    const fetchHeaders: HeadersInit = {};
-    if (hfToken) fetchHeaders["Authorization"] = `Bearer ${hfToken}`;
+    // ── Fetch via local proxy (same method as aai_trainer) ────────────────────
+    console.log("[EdgeLLM Worker] Fetching model via proxy:", proxyUrl);
 
-    const response = await fetch(config.modelUrl, {
-      mode: "cors",
-      credentials: "omit",
-      headers: fetchHeaders,
+    const response = await fetch(proxyUrl, {
       // no-store skips the browser HTTP cache — we manage caching via IndexedDB
       cache: "no-store",
     });
@@ -261,7 +264,11 @@ async function loadModel(modelId?: string) {
   self.postMessage({ type: "STATUS", status: "loading", progress: 1 });
 
   // Fix #3: Assign to module-level variable — generate() reuses this reference
-  ort = await import("onnxruntime-web");
+  if ("gpu" in navigator) {
+    ort = (await import("onnxruntime-web/webgpu")) as any;
+  } else {
+    ort = await import("onnxruntime-web");
+  }
 
   const hardwareConcurrency = navigator.hardwareConcurrency ?? 1;
   const hasSharedArrayBuffer = typeof SharedArrayBuffer !== "undefined";
@@ -297,12 +304,20 @@ async function loadModel(modelId?: string) {
   ort.env.wasm.proxy = false; // Already inside a Worker — no need for a proxy worker
   ort.env.wasm.numThreads = numThreads;
   ort.env.wasm.simd = simdOk;
-  ort.env.wasm.wasmPaths = `${self.location.origin}/`;
+  // Use the jsDelivr CDN for WASM binaries — same as aai_trainer.
+  // Pointing at self.location.origin caused failures on mobile because the
+  // Next.js dev server doesn't reliably serve the ORT WASM files.
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
+
+  let providers: string[] = ["wasm"];
+  if ("gpu" in navigator) {
+    providers = ["webgpu", "wasm"];
+  }
 
   try {
-    console.log("[EdgeLLM Worker] Creating ONNX session (attempt 1)");
+    console.log(`[EdgeLLM Worker] Creating ONNX session (attempt 1) with providers: ${providers.join(", ")}`);
     session = await ort.InferenceSession.create(modelBuffer, {
-      executionProviders: ["wasm"],
+      executionProviders: providers,
       graphOptimizationLevel: "all",
     });
   } catch (err) {
@@ -315,13 +330,17 @@ async function loadModel(modelId?: string) {
     });
   }
 
-  // ── Tokenizer loading (direct from HuggingFace — fully client-side) ─────────
-  console.log("[EdgeLLM Worker] Loading tokenizer directly from HuggingFace:", config.tokenizerRepo);
+  // ── Tokenizer loading (via /api/hf-proxy — same method as aai_trainer) ──────
+  // Routing through the proxy adds CORP headers so the browser permits the
+  // tokenizer JSON files under COEP (require-corp). Without this, iOS Safari
+  // blocks the cross-origin tokenizer fetch and initialization fails.
+  const PROXY_BASE = `${self.location.origin}/api/hf-proxy/`;
+  console.log("[EdgeLLM Worker] Loading tokenizer via proxy:", PROXY_BASE + config.tokenizerRepo);
   const { AutoTokenizer, env } = await import("@huggingface/transformers");
 
+  env.remoteHost = PROXY_BASE;
   env.allowRemoteModels = true;
   env.useBrowserCache = true; // cache tokenizer files in the browser cache
-  if (hfToken) (env as Record<string, unknown>).authToken = hfToken;
 
   try {
     tokenizer = await AutoTokenizer.from_pretrained(config.tokenizerRepo);

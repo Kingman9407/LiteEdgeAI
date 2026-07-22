@@ -31,8 +31,12 @@ export async function GET(req: NextRequest) {
         Accept: 'application/octet-stream',
       };
       
-      // Only attach Authorization header on the initial request to Hugging Face
       const token = process.env.HF_TOKEN;
+      if (!token && redirectCount === 0) {
+        console.error('[/api/model] CRITICAL: process.env.HF_TOKEN is missing or undefined!');
+        return new NextResponse('Server configuration error: HF_TOKEN is missing', { status: 500 });
+      }
+
       if (token && redirectCount === 0) {
         hfHeaders['Authorization'] = `Bearer ${token}`;
       }
