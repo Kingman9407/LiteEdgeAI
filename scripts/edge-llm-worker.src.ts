@@ -42,8 +42,8 @@ const DEFAULT_MODEL_ID = "Kingman9407/hornet";
 // Fix #3: Import ORT once at module level — reused by both loadModel and generate.
 // Avoids re-resolving the dynamic import on every generate() call.
 let ort: any;
-let session: import("onnxruntime-web").InferenceSession | null = null;
-let tokenizer: import("@huggingface/transformers").PreTrainedTokenizer | null = null;
+let session: any;
+let tokenizer: any;
 let eosTokenId = FALLBACK_EOS_TOKEN_ID;
 
 // Token is no longer embedded in the client bundle — the server proxy
