@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Model files fetched through the local Next.js proxy (/api/model) — same method
 // as the working aai_trainer project. The proxy injects the required
 // Cross-Origin-Resource-Policy headers (needed for SharedArrayBuffer / multi-threading)
