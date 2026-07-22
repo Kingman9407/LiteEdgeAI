@@ -1,9 +1,9 @@
 /**
- * Bundles scripts/edge-llm-worker.src.js  →  public/edge-llm.worker.js
+ * Bundles scripts/edge-llm-worker.src.ts  →  public/edge-llm.worker.js
  *
  * Bundling strategy:
  *   - onnxruntime-web  : bundled (it already handles WASM file URLs internally)
- *   - @xenova/transformers : bundled, with loader '.wasm' = 'file' so that
+ *   - @huggingface/transformers : bundled, with loader '.wasm' = 'file' so that
  *     tokenizers-web WASM is emitted as a separate file into /public and its
  *     URL is set correctly via `new URL('./...', import.meta.url)` transform.
  *
