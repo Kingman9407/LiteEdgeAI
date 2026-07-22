@@ -31,7 +31,11 @@ export async function GET(req: NextRequest) {
         Accept: 'application/octet-stream',
       };
       
-      const token = process.env.HF_TOKEN;
+      const token = process.env.HF_TOKEN || process.env.NEXT_PUBLIC_HF_TOKEN;
+      if (redirectCount === 0) {
+        console.log(`[/api/model] DEBUG TOKEN (first 10 chars):`, token ? `${token.substring(0, 10)}...` : 'UNDEFINED or EMPTY');
+      }
+
       if (!token && redirectCount === 0) {
         console.error('[/api/model] CRITICAL: process.env.HF_TOKEN is missing or undefined!');
         return new NextResponse('Server configuration error: HF_TOKEN is missing', { status: 500 });
