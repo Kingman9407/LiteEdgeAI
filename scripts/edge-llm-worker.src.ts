@@ -305,17 +305,14 @@ async function loadModel(modelId?: string) {
 
   self.postMessage({ type: "STATUS", status: "loading", progress: 1 });
 
-  // Fix #3: Assign to module-level variable — generate() reuses this reference
+  // Fix #3: Assign to module-level variable — generate() reuses this reference.
+  // NOTE: Do NOT use a conditional import("onnxruntime-web/webgpu") here.
+  // esbuild resolves both branches at bundle time; the /webgpu sub-entry point
+  // is not exported by onnxruntime-web@1.20.1 and causes a top-level eval crash
+  // before self.addEventListener("message") is ever reached (worker onerror: undefined).
   const ortImportStart = performance.now();
-  if ("gpu" in navigator) {
-    console.log("[EdgeLLM Worker] 🖥️  WebGPU detected — importing onnxruntime-web/webgpu...");
-    ort = (await import("onnxruntime-web/webgpu")) as any;
-    console.log(`[EdgeLLM Worker] ✅ ORT WebGPU imported in ${(performance.now() - ortImportStart).toFixed(0)}ms`);
-  } else {
-    console.log("[EdgeLLM Worker] 🔧 No WebGPU — importing onnxruntime-web (WASM only)...");
-    ort = await import("onnxruntime-web");
-    console.log(`[EdgeLLM Worker] ✅ ORT WASM imported in ${(performance.now() - ortImportStart).toFixed(0)}ms`);
-  }
+  ort = await import("onnxruntime-web");
+  console.log(`[EdgeLLM Worker] ✅ ORT (WASM) imported in ${(performance.now() - ortImportStart).toFixed(0)}ms`);
 
   const hardwareConcurrency = navigator.hardwareConcurrency ?? 1;
   const hasSharedArrayBuffer = typeof SharedArrayBuffer !== "undefined";
@@ -362,16 +359,15 @@ async function loadModel(modelId?: string) {
   ort.env.wasm.proxy = false; // Already inside a Worker — no need for a proxy worker
   ort.env.wasm.numThreads = numThreads;
   ort.env.wasm.simd = simdOk;
-  // Use the jsDelivr CDN for WASM binaries — same as aai_trainer.
-  // Pointing at self.location.origin caused failures on mobile because the
-  // Next.js dev server doesn't reliably serve the ORT WASM files.
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
+  // WASM binary CDN — version MUST match the installed onnxruntime-web npm package
+  // (package.json: onnxruntime-web@1.20.1). Pointing at a different version causes
+  // a silent ABI mismatch that crashes WASM instantiation.
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
   console.log("[EdgeLLM Worker] 🔧 ORT WASM paths set to:", ort.env.wasm.wasmPaths);
 
-  let providers: string[] = ["wasm"];
-  if ("gpu" in navigator) {
-    providers = ["webgpu", "wasm"];
-  }
+  // Always use wasm execution provider — webgpu requires the /webgpu sub-entry
+  // which is not exported in our installed version.
+  const providers: string[] = ["wasm"];
   console.log("[EdgeLLM Worker] 🧠 Execution providers:", providers);
 
   try {
@@ -394,6 +390,9 @@ async function loadModel(modelId?: string) {
     });
     console.log(`[EdgeLLM Worker] ✅ ONNX session created in ${(performance.now() - fallbackStart).toFixed(0)}ms (fallback)`);
   }
+  // Free the modelBuffer from JS heap now that ORT has loaded it into WASM memory.
+  // This recovers ~137 MB of RAM that would otherwise be retained until GC.
+  (modelBuffer as any) = null;
 
   // ── Tokenizer loading (via /api/hf-proxy — same method as aai_trainer) ──────
   // Routing through the proxy adds CORP headers so the browser permits the
@@ -450,7 +449,8 @@ async function loadModel(modelId?: string) {
 
 async function generateWithKvCache(
   initialInputIds: number[],
-  generatedTokenIds: number[]
+  generatedTokenIds: number[],
+  reqId: number
 ): Promise<void> {
   if (!session || !ort) { console.error("[EdgeLLM Worker] ❌ generateWithKvCache called but session/ort is null!"); return; }
   console.log(`[EdgeLLM Worker] [KV-cache] Prefill — prompt length: ${initialInputIds.length} tokens`);
@@ -511,6 +511,10 @@ async function generateWithKvCache(
     return;
   }
   generatedTokenIds.push(nextToken);
+  if (tokenizer) {
+    const partialToken = await tokenizer.decode([nextToken], { skip_special_tokens: true });
+    if (partialToken) self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+  }
 
   // ── Decode: one new token per step with growing KV cache ──────────────────
   // Fix #2: Pre-allocate the attention mask buffer at max length — all 1s.
@@ -559,6 +563,10 @@ async function generateWithKvCache(
       break;
     }
     generatedTokenIds.push(nextToken);
+    if (tokenizer) {
+      const partialToken = await tokenizer.decode([nextToken], { skip_special_tokens: true });
+      if (partialToken) self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+    }
   }
 }
 
@@ -570,7 +578,8 @@ async function generateWithKvCache(
 
 async function generateFullRefeed(
   inputIds: number[],
-  generatedTokenIds: number[]
+  generatedTokenIds: number[],
+  reqId: number
 ): Promise<void> {
   if (!session || !ort) { console.error("[EdgeLLM Worker] ❌ generateFullRefeed called but session/ort is null!"); return; }
   console.warn(`[EdgeLLM Worker] [Full-refeed] Using O(N²) path. Prompt length: ${inputIds.length} tokens. Consider exporting KV-cache outputs from the model.`);
@@ -620,6 +629,10 @@ async function generateFullRefeed(
     }
 
     generatedTokenIds.push(nextToken);
+    if (tokenizer) {
+      const partialToken = await tokenizer.decode([nextToken], { skip_special_tokens: true });
+      if (partialToken) self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+    }
 
     // Extend pre-allocated buffers in-place — O(1), no allocation
     inputIdsBuf[currentLen] = BigInt(nextToken);
@@ -671,24 +684,25 @@ async function generate(prompt: string | ChatMLMessage[], reqId: number) {
 
   if (hasKvOutputs && hasKvInputs) {
     console.log("[EdgeLLM Worker] Using KV-cache path (O(N) per decode step)");
-    await generateWithKvCache(inputIds, generatedTokenIds);
+    await generateWithKvCache(inputIds, generatedTokenIds, reqId);
   } else {
     console.log("[EdgeLLM Worker] Using full-refeed fallback (model lacks KV outputs)");
-    await generateFullRefeed(inputIds, generatedTokenIds);
+    await generateFullRefeed(inputIds, generatedTokenIds, reqId);
   }
 
   const endTime = performance.now();
   const elapsedSec = (endTime - startTime) / 1000;
-  const tps = generatedTokenIds.length / elapsedSec;
+  const tps = generatedTokenIds.length > 0 ? generatedTokenIds.length / elapsedSec : 0;
 
   console.log(
-    `[EdgeLLM Worker] Generated ${generatedTokenIds.length} new tokens ` +
-    `in ${elapsedSec.toFixed(2)}s (${tps.toFixed(2)} tokens/sec). Decoding...`
+    `[EdgeLLM Worker] Generated ${generatedTokenIds.length} tokens ` +
+    `in ${elapsedSec.toFixed(2)}s (${tps.toFixed(2)} tok/s). Decoding...`
   );
 
   const decoded = await tokenizer.decode(generatedTokenIds, { skip_special_tokens: true });
+
   const cleanedText = parseJsonResponse(decoded);
-  self.postMessage({ type: "DONE", reqId, text: cleanedText.trim() });
+  self.postMessage({ type: "DONE", reqId, text: cleanedText.trim(), tps });
 }
 
 // ─── Message handler ──────────────────────────────────────────────────────────
@@ -716,6 +730,23 @@ self.addEventListener("message", (e) => {
     ort = null;
     eosTokenId = FALLBACK_EOS_TOKEN_ID;
     self.postMessage({ type: "STATUS", status: "idle", progress: 0 });
+  } else if (type === "CLEAR_CACHE") {
+    console.log("[EdgeLLM Worker] 🗑️  CLEAR_CACHE received — deleting IndexedDB store.");
+    if (_idb) {
+      _idb.close();
+      _idb = null;
+    }
+    const req = indexedDB.deleteDatabase(IDB_DB_NAME);
+    req.onsuccess = () => {
+      self.postMessage({ type: "DONE", reqId: payload?.reqId, text: "Cache cleared." });
+    };
+    req.onerror = () => {
+      self.postMessage({ type: "ERROR", reqId: payload?.reqId, error: "Failed to clear cache." });
+    };
+    req.onblocked = () => {
+      // Blocked connections usually clear on next page reload — report success anyway.
+      self.postMessage({ type: "DONE", reqId: payload?.reqId, text: "Cache clear blocked (will clear on reload)." });
+    };
   } else {
     console.warn(`[EdgeLLM Worker] ⚠️  Unknown message type received: "${type}"`);
   }
