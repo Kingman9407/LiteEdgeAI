@@ -24,9 +24,12 @@ export function useEdgeLLM() {
                 workerRef.current = null;
             }
 
-            // Create worker pointing to compiled static worker file
-            console.log('[useEdgeLLM] 🔧 Spawning new Worker from /edge-llm.worker.js...');
-            const worker = new Worker('/edge-llm.worker.js', { type: 'module' });
+            // Load worker as native ES module — Next.js/Turbopack compiles it automatically.
+            // This matches the aai_trainer pattern and allows ORT WASM multi-threading to work
+            // correctly (ORT spawns sub-workers from import.meta.url of its own WASM module,
+            // not from our script).
+            console.log('[useEdgeLLM] 🔧 Spawning new Worker from edge-llm.worker.ts (module)...');
+            const worker = new Worker(new URL('./edge-llm.worker.ts', import.meta.url));
             workerRef.current = worker;
             console.log('[useEdgeLLM] ✅ Worker spawned successfully. Sending LOAD message...');
 

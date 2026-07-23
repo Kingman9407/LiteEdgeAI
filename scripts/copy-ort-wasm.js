@@ -13,6 +13,9 @@ const FILES = [
   "ort-wasm-simd-threaded.jsep.mjs",
   "ort-wasm-simd-threaded.wasm",
   "ort-wasm-simd-threaded.mjs",
+  // ORT uses this as the thread worker script. Copying to /public gives it
+  // a proper HTTP URL so browsers don't block it with a SecurityError.
+  "ort.bundle.min.mjs",
 ];
 
 for (const file of FILES) {

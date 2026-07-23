@@ -334,14 +334,12 @@ async function loadModel(modelId?: string) {
   }
 
   const canMultiThread = hasSharedArrayBuffer && hasAtomics;
-  // Fix #4: Cap at physical-core estimate and a hard maximum of 4.
-  // navigator.hardwareConcurrency reports logical threads (includes hyperthreads).
-  // Hyperthreads share FPU/SIMD units — extra WASM threads cause cache thrashing
-  // and synchronisation overhead. Halving and capping at 4 consistently gives
-  // 20–30% better transformer throughput in benchmarks.
-  const numThreads = canMultiThread
-    ? Math.min(Math.max(1, Math.floor(hardwareConcurrency / 2)), 4)
-    : 1;
+  // ORT WASM multi-threading spawns additional workers from the same worker script URL.
+  // Since this script is a bundled esbuild output (not a true ES module), ORT's thread
+  // workers boot the full script, fail to initialize as WASM threads, and deadlock —
+  // leaving the session creation hanging forever.
+  // Fix: always use single-threaded mode. ORT will not spawn any thread workers.
+  const numThreads = 1;
 
   console.log(
     `[EdgeLLM Worker] WASM config — threads: ${numThreads} ` +
@@ -356,13 +354,13 @@ async function loadModel(modelId?: string) {
   console.log("[EdgeLLM Worker]  • Threads to use:", numThreads, `(of ${hardwareConcurrency} logical cores)`);
   console.groupEnd();
 
-  ort.env.wasm.proxy = false; // Already inside a Worker — no need for a proxy worker
-  ort.env.wasm.numThreads = numThreads;
-  ort.env.wasm.simd = simdOk;
+  ort.env.wasm.proxy = false;       // Already inside a Worker — no proxy needed
+  ort.env.wasm.numThreads = 1;      // Single-threaded: avoids ORT spawning broken thread sub-workers
+  // Note: ort.env.wasm.simd is deprecated in ORT 1.20.1 and ignored — omit it to suppress the warning
   // WASM binary CDN — version MUST match the installed onnxruntime-web npm package
-  // (package.json: onnxruntime-web@1.20.1). Pointing at a different version causes
+  // (package.json: onnxruntime-web@1.26.0). Pointing at a different version causes
   // a silent ABI mismatch that crashes WASM instantiation.
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
   console.log("[EdgeLLM Worker] 🔧 ORT WASM paths set to:", ort.env.wasm.wasmPaths);
 
   // Always use wasm execution provider — webgpu requires the /webgpu sub-entry

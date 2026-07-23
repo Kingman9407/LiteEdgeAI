@@ -3,6 +3,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
+  // Tell Turbopack NOT to bundle these large WASM/AI libs into worker chunks.
+  // When bundled, ORT's thread spawner resolves its own path to file:// URLs
+  // which browsers block from HTTP origins (SecurityError). Keeping them external
+  // lets Turbopack serve them via proper HTTP, so ORT threads work correctly.
+  serverExternalPackages: [
+    "onnxruntime-web",
+    "@huggingface/transformers",
+  ],
+
   async headers() {
     return [
       // ── Global COOP/COEP — required for SharedArrayBuffer / WebGPU ──────────
@@ -35,6 +44,16 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/models/:file*.onnx",
+        headers: [
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+        ],
+      },
+      // ── CORP for Next.js compiled JS chunks (module workers) ─────────────────
+      // When spawning a worker via new URL('./worker.ts', import.meta.url),
+      // Turbopack serves the compiled worker as a /_next/static/chunks/*.js file.
+      // COEP (credentialless) requires a CORP header on same-origin resources too.
+      {
+        source: "/_next/static/:path*",
         headers: [
           { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
         ],
