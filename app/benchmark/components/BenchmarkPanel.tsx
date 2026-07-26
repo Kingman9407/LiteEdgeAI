@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { BENCHMARKS } from '../data/benchmarkTests';
 import { BenchmarkResult, BenchmarkMode } from '../types/types';
 
-const ITERATIONS_PER_TEST = 4;   // ≥4 so dropAndAverage can drop the worst outlier
+// Default iterations for WebGPU/fast models. SmolLM2 uses fewer — see below.
 
 interface Props {
     runPromptBenchmark: (prompt: string, maxTokens: number) => Promise<{
@@ -41,6 +41,10 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
 
     const tests = BENCHMARKS[mode];
 
+    // SmolLM2 (hornet) runs on CPU WASM — each iteration is slow, so use 2.
+    // Other modes run on WebGPU where 4 iterations + outlier-drop gives cleaner numbers.
+    const ITERATIONS_PER_TEST = mode === 'hornet' ? 1 : 4;
+
     const totalSuiteTokens = tests.reduce((sum, t) => sum + t.maxTokens, 0);
 
     const runBenchmark = async () => {
@@ -52,23 +56,11 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
 
         const benchmarkStartTime = performance.now();
 
-        // Global warmup — prime the engine on the first test prompt
-        setPhase('warmup');
-        await runPromptBenchmark(tests[0].prompt, tests[0].maxTokens);
-
         const finalResults: BenchmarkResult[] = [];
 
         for (let i = 0; i < tests.length; i++) {
             setCurrent(i + 1);
             const test = tests[i];
-
-            // Per-test warmup: primes the KV-cache for prompts that differ
-            // significantly from the previous test (eliminates cold-cache bias
-            // on tests 2..N which have no dedicated warmup otherwise).
-            if (i > 0) {
-                setPhase(`warmup test ${i + 1}/${tests.length} "${test.name}"`);
-                await runPromptBenchmark(test.prompt, Math.min(test.maxTokens, 64));
-            }
 
             const iterTPS: number[] = [];
             const iterFTL: number[] = [];
@@ -195,7 +187,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                             : 'bg-[#232428] text-[#b0b4bb] border border-[#34363c] hover:border-[#4fbf8a] hover:text-[#4fbf8a]'
                             }`}
                     >
-                        {m === 'hornet' ? 'Hornet Benchmark (In-House)' : m}
+                        {m === 'hornet' ? 'SmolLM2 Eval' : m}
                     </button>
                 ))}
             </div>
@@ -204,15 +196,15 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
             <div className="text-xs text-[#b0b4bb] flex gap-4 flex-wrap items-center">
                 <span>{tests.length} tests</span>
                 <span>Up to {totalSuiteTokens.toLocaleString()} total tokens</span>
-                <span>{ITERATIONS_PER_TEST} iterations each</span>
+                <span>{ITERATIONS_PER_TEST}× per test{mode === 'hornet' ? ' (fast mode)' : ''}</span>
                 {mode === 'extreme' && (
                     <span className="text-red-400 font-medium">
                         ⚠️ May crash on low-memory devices
                     </span>
                 )}
                 {mode === 'hornet' && (
-                    <span className="text-purple-400 font-medium animate-pulse">
-                        🔮 Custom video-editing evaluation suite
+                    <span className="text-purple-400 font-medium">
+                        Custom video-editing evaluation suite
                     </span>
                 )}
             </div>
@@ -264,7 +256,7 @@ export function BenchmarkPanel({ runPromptBenchmark, disabled, onBenchmarkComple
                     : mode === 'extreme'
                         ? '🔥 Run Extreme Benchmark'
                         : mode === 'hornet'
-                            ? '🔮 Run Hornet Benchmark'
+                            ? 'Run SmolLM2 Eval'
                             : 'Run Benchmark'}
             </button>
 

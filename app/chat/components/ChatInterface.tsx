@@ -121,7 +121,13 @@ export default function ChatInterface() {
 
             for await (const chunk of stream) {
                 if (abortRef.current) break;
-                accumulated += chunk;
+                // __REPLACE__: sentinel means the worker's parseJsonResponse has
+                // produced the final clean text — swap out the raw streamed fragments.
+                if (chunk.startsWith('__REPLACE__:')) {
+                    accumulated = chunk.slice('__REPLACE__:'.length);
+                } else {
+                    accumulated += chunk;
+                }
                 setMessages(prev =>
                     prev.map(m =>
                         m.id === assistantMsg.id ? { ...m, content: accumulated } : m
@@ -162,8 +168,8 @@ export default function ChatInterface() {
 
     // ── Model display labels ──────────────────────────────────────────────────
     const modelLabel = choice === 'hornet'
-        ? { icon: '🐝', name: 'Kingman Hornet', sub: '135M · ONNX' }
-        : { icon: '⚡', name: 'inferis-ml',      sub: 'Qwen 2.5 0.5B · WebGPU' };
+        ? { name: 'SmolLM2 135M', sub: 'ONNX · WASM', color: HORNET_AMBER }
+        : { name: 'inferis-ml',   sub: 'Qwen 2.5 0.5B · WebGPU', color: INFERIS_BLUE };
 
     return (
         <div
@@ -248,7 +254,14 @@ export default function ChatInterface() {
                                 transition:      'border-color 0.2s',
                             }}
                         >
-                            <span>{modelLabel.icon}</span>
+                            <span style={{
+                                    width:           '8px',
+                                    height:          '8px',
+                                    borderRadius:    '50%',
+                                    backgroundColor: activeColor,
+                                    display:         'inline-block',
+                                    flexShrink:      0,
+                                }} />
                             <span>{modelLabel.name}</span>
                             <span style={{ color: activeColor, fontSize: '0.65rem' }}>▾</span>
                         </button>
@@ -289,7 +302,14 @@ export default function ChatInterface() {
                                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = choice === 'inferis' ? `${INFERIS_BLUE}15` : 'transparent')}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                                        <span>⚡</span>
+                                        <span style={{
+                                            width:           '8px',
+                                            height:          '8px',
+                                            borderRadius:    '50%',
+                                            backgroundColor: INFERIS_BLUE,
+                                            display:         'inline-block',
+                                            flexShrink:      0,
+                                        }} />
                                         <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>inferis-ml</span>
                                         <span style={{
                                             marginLeft:      'auto',
@@ -303,7 +323,7 @@ export default function ChatInterface() {
                                             All Devices
                                         </span>
                                     </div>
-                                    <div style={{ fontSize: '0.7rem', color: '#6e7278', paddingLeft: '24px' }}>
+                                    <div style={{ fontSize: '0.7rem', color: '#6e7278', paddingLeft: '16px' }}>
                                         Qwen 2.5 0.5B · WebGPU + WASM fallback
                                     </div>
                                 </button>
@@ -327,8 +347,15 @@ export default function ChatInterface() {
                                     onMouseLeave={e => { e.currentTarget.style.backgroundColor = choice === 'hornet' ? `${HORNET_AMBER}15` : 'transparent'; }}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                                        <span>🐝</span>
-                                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Kingman Hornet</span>
+                                        <span style={{
+                                            width:           '8px',
+                                            height:          '8px',
+                                            borderRadius:    '50%',
+                                            backgroundColor: HORNET_AMBER,
+                                            display:         'inline-block',
+                                            flexShrink:      0,
+                                        }} />
+                                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>SmolLM2 135M</span>
                                         <span style={{
                                             marginLeft:      'auto',
                                             fontSize:        '0.6rem',
@@ -341,8 +368,8 @@ export default function ChatInterface() {
                                             All Devices
                                         </span>
                                     </div>
-                                    <div style={{ fontSize: '0.7rem', color: '#6e7278', paddingLeft: '24px' }}>
-                                        135M · ONNX WASM · Fine-tuned SmolLM2
+                                    <div style={{ fontSize: '0.7rem', color: '#6e7278', paddingLeft: '16px' }}>
+                                        SmolLM2 135M · ONNX WASM
                                     </div>
                                 </button>
                             </div>
@@ -369,7 +396,7 @@ export default function ChatInterface() {
                             onMouseEnter={e => (e.currentTarget.style.backgroundColor = activeColorDark)}
                             onMouseLeave={e => (e.currentTarget.style.backgroundColor = activeColor)}
                         >
-                            {choice === 'hornet' ? '🐝 Load' : '⚡ Load'}
+                            Load
                         </button>
                     ) : (
                         <button
@@ -520,7 +547,13 @@ export default function ChatInterface() {
                                     flexShrink:     0,
                                 }}
                             >
-                                {choice === 'hornet' ? '🐝' : '⚡'}
+                            <div style={{
+                                    width:           '10px',
+                                    height:          '10px',
+                                    borderRadius:    '50%',
+                                    backgroundColor: activeColor,
+                                    boxShadow:       `0 0 6px ${activeColor}88`,
+                                }} />
                             </div>
                         )}
 

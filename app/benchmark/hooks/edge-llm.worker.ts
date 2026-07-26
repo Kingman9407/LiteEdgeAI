@@ -7,18 +7,18 @@
 const IDB_DB_NAME = "edge-llm-cache";
 const IDB_STORE = "models";
 
-const MAX_NEW_TOKENS = 256;
+// Per-model token limit — set by loadModel() from ModelConfig.maxNewTokens
+let MAX_NEW_TOKENS = 64;
 const FALLBACK_EOS_TOKEN_ID = 2;
 
 // ─── Known model configs ──────────────────────────────────────────────────────
 interface ModelConfig {
-  // HuggingFace repo id (used to build the proxy URL)
   repo: string;
-  // Path inside the repo, e.g. "onnx/untrained/model.onnx"
   file: string;
   tokenizerRepo: string;
   idbKey: string;
   knownBytes: number;
+  maxNewTokens: number;  // per-model chat token cap
 }
 
 const MODEL_CONFIGS: Record<string, ModelConfig> = {
@@ -28,6 +28,7 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
     tokenizerRepo: "Kingman9407/hornet",
     idbKey: "kingman-hornet-untrained-v1",
     knownBytes: 137452646,
+    maxNewTokens: 64,   // CPU WASM is slow — keep responses short
   },
   "onnx-community/SmolLM2-135M-Instruct": {
     repo: "onnx-community/SmolLM2-135M-Instruct",
@@ -35,6 +36,7 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
     tokenizerRepo: "onnx-community/SmolLM2-135M-Instruct",
     idbKey: "smollm2-135m-instruct-v1",
     knownBytes: 137000000,
+    maxNewTokens: 256,
   },
 };
 
@@ -152,8 +154,10 @@ async function cacheModel(buffer: ArrayBuffer, idbKey: string): Promise<void> {
 
 async function loadModel(modelId?: string) {
   const config = MODEL_CONFIGS[modelId ?? DEFAULT_MODEL_ID] ?? MODEL_CONFIGS[DEFAULT_MODEL_ID];
+  MAX_NEW_TOKENS = config.maxNewTokens;  // apply per-model token cap
 
   console.group(`[EdgeLLM Worker] ══ loadModel("${modelId ?? DEFAULT_MODEL_ID}") ══`);
+  console.log(`[EdgeLLM Worker] 📋 Token cap: ${MAX_NEW_TOKENS} (from model config)`);
   console.log("[EdgeLLM Worker] 📋 Config:", JSON.stringify(config, null, 2));
   console.log("[EdgeLLM Worker] 🖥️  User-Agent:", navigator.userAgent);
   console.log("[EdgeLLM Worker] 💻 Hardware concurrency:", navigator.hardwareConcurrency);
@@ -338,8 +342,12 @@ async function loadModel(modelId?: string) {
   // instead of from node_modules (file://). Browsers block file:// → http:// worker
   // spawning (SecurityError). With workerURL pointing to our origin, ORT can
   // spawn its thread sub-workers without any security violation.
+  // Desktop: cap at 8 threads — ORT benefits up to ~8 for this model size.
+  // Mobile: cap at 4 to avoid memory pressure.
+  const isMobileAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const threadCap = isMobileAgent ? 4 : 8;
   const numThreads = canMultiThread
-    ? Math.min(Math.max(1, Math.floor(hardwareConcurrency / 2)), 4)
+    ? Math.min(Math.max(1, Math.floor(hardwareConcurrency / 2)), threadCap)
     : 1;
 
   console.log(
@@ -515,7 +523,10 @@ async function generateWithKvCache(
   generatedTokenIds.push(nextToken);
   if (tokenizer) {
     const partialToken = await tokenizer.decode([nextToken], { skip_special_tokens: true });
-    if (partialToken) self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+    if (partialToken) {
+      process.stdout?.write?.(partialToken) ?? console.log(`[token] ${partialToken}`);
+      self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+    }
   }
 
   // ── Decode: one new token per step with growing KV cache ──────────────────
@@ -567,7 +578,10 @@ async function generateWithKvCache(
     generatedTokenIds.push(nextToken);
     if (tokenizer) {
       const partialToken = await tokenizer.decode([nextToken], { skip_special_tokens: true });
-      if (partialToken) self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+      if (partialToken) {
+        process.stdout?.write?.(partialToken) ?? console.log(`[token] ${partialToken}`);
+        self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+      }
     }
   }
 }
@@ -633,7 +647,10 @@ async function generateFullRefeed(
     generatedTokenIds.push(nextToken);
     if (tokenizer) {
       const partialToken = await tokenizer.decode([nextToken], { skip_special_tokens: true });
-      if (partialToken) self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+      if (partialToken) {
+        process.stdout?.write?.(partialToken) ?? console.log(`[token] ${partialToken}`);
+        self.postMessage({ type: "PARTIAL", reqId, text: partialToken });
+      }
     }
 
     // Extend pre-allocated buffers in-place — O(1), no allocation
@@ -704,6 +721,12 @@ async function generate(prompt: string | ChatMLMessage[], reqId: number) {
   const decoded = await tokenizer.decode(generatedTokenIds, { skip_special_tokens: true });
 
   const cleanedText = parseJsonResponse(decoded);
+  console.log(
+    `[EdgeLLM Worker] 🤖 Response (${generatedTokenIds.length} tokens, ${tps.toFixed(2)} tok/s):\n` +
+    `──────────────────────────────────────────\n` +
+    cleanedText.trim() +
+    `\n──────────────────────────────────────────`
+  );
   self.postMessage({ type: "DONE", reqId, text: cleanedText.trim(), tps });
 }
 

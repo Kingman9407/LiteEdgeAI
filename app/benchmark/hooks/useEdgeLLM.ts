@@ -94,6 +94,64 @@ export function useEdgeLLM() {
         }
     };
 
+    const generateStream = async function* (
+        prompt: string | object[]
+    ): AsyncGenerator<string> {
+        console.log(`[useEdgeLLM] 📶 generateStream() called.`);
+        if (!workerRef.current) {
+            throw new Error('Model not loaded.');
+        }
+
+        const reqId = nextReqId.current++;
+        const worker = workerRef.current;
+
+        // Queue-based async pull — yields each PARTIAL token as it arrives,
+        // then on DONE emits a special "__REPLACE__:<finalText>" sentinel so
+        // the caller can replace the accumulated raw-JSON fragments with the
+        // parseJsonResponse-cleaned final text from the worker.
+        const queue: string[] = [];
+        let done = false;
+        let error: Error | null = null;
+        let notify: (() => void) | null = null;
+
+        const handleMessage = (e: MessageEvent) => {
+            if (e.data.reqId !== reqId) return;
+            if (e.data.type === 'PARTIAL') {
+                if (e.data.text) {
+                    queue.push(e.data.text);
+                    notify?.();
+                }
+            } else if (e.data.type === 'DONE') {
+                // Push the final clean text as a replacement sentinel.
+                // The caller detects the prefix and swaps accumulated content.
+                if (e.data.text) {
+                    queue.push(`__REPLACE__:${e.data.text}`);
+                }
+                done = true;
+                notify?.();
+                worker.removeEventListener('message', handleMessage);
+            } else if (e.data.type === 'ERROR') {
+                error = new Error(e.data.error);
+                done = true;
+                notify?.();
+                worker.removeEventListener('message', handleMessage);
+            }
+        };
+
+        worker.addEventListener('message', handleMessage);
+        worker.postMessage({ type: 'GENERATE', payload: { prompt, reqId } });
+
+        while (true) {
+            while (queue.length > 0) {
+                yield queue.shift()!;
+            }
+            if (done) break;
+            await new Promise<void>(res => { notify = res; });
+            notify = null;
+        }
+        if (error) throw error;
+    };
+
     const generate = async (prompt: string): Promise<string> => {
         console.log(`[useEdgeLLM] 💬 generate() called. Prompt length: ${prompt.length} chars.`);
         if (!workerRef.current) {
@@ -135,5 +193,6 @@ export function useEdgeLLM() {
         loadModel,
         unloadModel,
         generate,
+        generateStream,
     };
 }

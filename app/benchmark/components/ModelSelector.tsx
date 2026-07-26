@@ -64,7 +64,12 @@ export function ModelSelector({
                     }}
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '1.1rem' }}>⚡</span>
+                        <span style={{
+                            width: '10px', height: '10px', borderRadius: '50%',
+                            backgroundColor: INFERIS_BLUE,
+                            boxShadow: choice === 'inferis' ? `0 0 6px ${INFERIS_BLUE}99` : 'none',
+                            display: 'inline-block', flexShrink: 0,
+                        }} />
                         <span style={{ fontWeight: 700, fontSize: '0.9rem', color: choice === 'inferis' ? INFERIS_BLUE : '#f2f3f5' }}>
                             inferis-ml
                         </span>
@@ -88,7 +93,7 @@ export function ModelSelector({
                     </p>
                 </button>
 
-                {/* ── Hornet card (all devices) ── */}
+                {/* ── SmolLM2 card (all devices) ── */}
                 <button
                     id="model-card-hornet"
                     disabled={modelLoaded}
@@ -106,9 +111,14 @@ export function ModelSelector({
                     }}
                 >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '1.1rem' }}>🐝</span>
+                        <span style={{
+                            width: '10px', height: '10px', borderRadius: '50%',
+                            backgroundColor: HORNET_AMBER,
+                            boxShadow: choice === 'hornet' ? `0 0 6px ${HORNET_AMBER}99` : 'none',
+                            display: 'inline-block', flexShrink: 0,
+                        }} />
                         <span style={{ fontWeight: 700, fontSize: '0.9rem', color: choice === 'hornet' ? HORNET_AMBER : '#f2f3f5' }}>
-                            Kingman Hornet
+                            SmolLM2 135M
                         </span>
                         <span style={{
                             marginLeft: 'auto',
@@ -125,8 +135,8 @@ export function ModelSelector({
                         </span>
                     </div>
                     <p style={{ fontSize: '0.72rem', color: '#9ca0a8', margin: 0, lineHeight: 1.5 }}>
-                        135M ONNX · WASM CPU · Smallest model<br />
-                        Fine-tuned SmolLM2 · fully offline
+                        SmolLM2 135M · ONNX WASM · Smallest model<br />
+                        Fully offline · CPU inference
                     </p>
                 </button>
 
@@ -153,7 +163,7 @@ export function ModelSelector({
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = activeColorDark)}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = activeColor)}
                 >
-                    {isHornet ? '🐝 Load Hornet (ONNX)' : '⚡ Load inferis-ml'}
+                    {isHornet ? 'Load SmolLM2 135M' : 'Load inferis-ml'}
                 </button>
             ) : (
                 <button

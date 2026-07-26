@@ -34,8 +34,9 @@ export function useONNXWeb() {
         prompt: string,
         options?: { temperature?: number; max_tokens?: number }
     ) {
-        const text = await edgeLLM.generate(prompt);
-        yield text;
+        // Stream tokens as they arrive from the worker (PARTIAL messages).
+        // This makes the chat UI feel instant \u2014 first token appears in ~1\u20132s.
+        yield* edgeLLM.generateStream(prompt);
     };
 
     const generateStreamBenchmark = async (

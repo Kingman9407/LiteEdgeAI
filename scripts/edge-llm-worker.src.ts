@@ -7,7 +7,7 @@
 const IDB_DB_NAME = "edge-llm-cache";
 const IDB_STORE = "models";
 
-const MAX_NEW_TOKENS = 256;
+const MAX_NEW_TOKENS = 128;
 const FALLBACK_EOS_TOKEN_ID = 2;
 
 // ─── Known model configs ──────────────────────────────────────────────────────
@@ -32,7 +32,10 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
   "onnx-community/SmolLM2-135M-Instruct": {
     repo: "onnx-community/SmolLM2-135M-Instruct",
     file: "onnx/model.onnx",
-    tokenizerRepo: "onnx-community/SmolLM2-135M-Instruct",
+    // Use the official HuggingFaceTB tokenizer repo — it contains the real vocab,
+    // BPE merges, and the embedded chat_template in tokenizer_config.json.
+    // The onnx-community fork may omit or diverge from these files.
+    tokenizerRepo: "HuggingFaceTB/SmolLM2-135M-Instruct",
     idbKey: "smollm2-135m-instruct-v1",
     knownBytes: 137000000,
   },
@@ -89,6 +92,46 @@ function argmax(arr: Float32Array): number {
     if (arr[i] > maxVal) { maxVal = arr[i]; maxIdx = i; }
   }
   return maxIdx;
+}
+
+// ─── WASM Compile Cache (Cache Storage API) ──────────────────────────────────
+// ORT compiles the ONNX graph into native WASM bytecode every page load, even
+// when the model bytes are already in IndexedDB. Persisting the compiled
+// WebAssembly.Module in CacheStorage eliminates the 5–20s compile step on
+// subsequent visits.
+
+const WASM_CACHE_NAME = "ort-wasm-compiled-v1";
+
+async function getCachedWasmModule(idbKey: string): Promise<WebAssembly.Module | null> {
+  try {
+    if (!('caches' in self)) return null;
+    const cache = await (self as any).caches.open(WASM_CACHE_NAME);
+    const response = await cache.match(`/wasm-module-cache/${idbKey}`);
+    if (!response) return null;
+    const buffer = await response.arrayBuffer();
+    const mod = await WebAssembly.compile(buffer);
+    console.log(`[EdgeLLM Worker] ✅ WASM module loaded from compile cache (${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB)`);
+    return mod;
+  } catch (err) {
+    console.warn("[EdgeLLM Worker] ⚠️  WASM compile cache read failed (non-fatal):", err);
+    return null;
+  }
+}
+
+async function cacheWasmModule(mod: WebAssembly.Module, idbKey: string): Promise<void> {
+  try {
+    if (!('caches' in self)) return;
+    const serialized = await (WebAssembly as any).serialize(mod) as ArrayBuffer;
+    const cache = await (self as any).caches.open(WASM_CACHE_NAME);
+    await cache.put(
+      `/wasm-module-cache/${idbKey}`,
+      new Response(serialized, { headers: { 'Content-Type': 'application/wasm' } })
+    );
+    console.log(`[EdgeLLM Worker] 🗄️  WASM module saved to compile cache.`);
+  } catch (err) {
+    // WebAssembly.serialize is not yet in all browsers — non-fatal
+    console.warn("[EdgeLLM Worker] ⚠️  WASM compile cache write failed (non-fatal):", err);
+  }
 }
 
 // ─── IndexedDB singleton ──────────────────────────────────────────────────────
@@ -334,48 +377,76 @@ async function loadModel(modelId?: string) {
   }
 
   const canMultiThread = hasSharedArrayBuffer && hasAtomics;
-  // ORT WASM multi-threading spawns additional workers from the same worker script URL.
-  // Since this script is a bundled esbuild output (not a true ES module), ORT's thread
-  // workers boot the full script, fail to initialize as WASM threads, and deadlock —
-  // leaving the session creation hanging forever.
-  // Fix: always use single-threaded mode. ORT will not spawn any thread workers.
-  const numThreads = 1;
 
   console.log(
-    `[EdgeLLM Worker] WASM config — threads: ${numThreads} ` +
-    `(hw: ${hardwareConcurrency}), SIMD: ${simdOk}, SAB: ${canMultiThread}`
+    `[EdgeLLM Worker] WASM capability — hw: ${hardwareConcurrency} cores, SIMD: ${simdOk}, SAB+Atomics (multithread): ${canMultiThread}`
   );
 
   console.group("[EdgeLLM Worker] ── WASM/ORT Environment");
   console.log("[EdgeLLM Worker]  • SIMD:", simdOk);
   console.log("[EdgeLLM Worker]  • SharedArrayBuffer:", hasSharedArrayBuffer);
   console.log("[EdgeLLM Worker]  • Atomics:", hasAtomics);
-  console.log("[EdgeLLM Worker]  • MultiThread:", canMultiThread);
-  console.log("[EdgeLLM Worker]  • Threads to use:", numThreads, `(of ${hardwareConcurrency} logical cores)`);
+  console.log("[EdgeLLM Worker]  • MultiThread capable:", canMultiThread);
   console.groupEnd();
 
-  ort.env.wasm.proxy = false;       // Already inside a Worker — no proxy needed
-  ort.env.wasm.numThreads = 1;      // Single-threaded: avoids ORT spawning broken thread sub-workers
-  // Note: ort.env.wasm.simd is deprecated in ORT 1.20.1 and ignored — omit it to suppress the warning
-  // WASM binary CDN — version MUST match the installed onnxruntime-web npm package
-  // (package.json: onnxruntime-web@1.26.0). Pointing at a different version causes
-  // a silent ABI mismatch that crashes WASM instantiation.
-  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
-  console.log("[EdgeLLM Worker] 🔧 ORT WASM paths set to:", ort.env.wasm.wasmPaths);
+  ort.env.wasm.proxy = false; // Already inside a Worker — no proxy needed
+
+  // ── WASM paths: use locally-served files from /public/ ───────────────────────
+  // The copy-ort-wasm.js predev script already copies these files:
+  //   ort-wasm-simd-threaded.wasm  ← SIMD + multi-threaded WASM binary
+  //   ort-wasm-simd-threaded.mjs   ← thread shim (ORT spawns this as sub-workers)
+  //   ort-wasm-simd-threaded.jsep.wasm / .mjs  ← JSEP variants
+  // Using "/" means ORT finds its thread shim at a proper same-origin HTTP URL
+  // so browsers don't block it with a SecurityError — this is what previously
+  // caused multi-threading to deadlock when the CDN path was used.
+  ort.env.wasm.wasmPaths = "/";
+  console.log("[EdgeLLM Worker] 🔧 ORT WASM paths set to: / (local /public/)");
+
+  // ── Thread count ──────────────────────────────────────────────────────────────
+  // With local wasmPaths ORT spawns its thread workers from ort-wasm-simd-threaded.mjs
+  // (NOT from this bundle), so the old deadlock no longer applies.
+  // Desktop: cap at 8 threads — ORT benefits up to ~8 for this model size.
+  // Mobile: cap at 4 to avoid memory pressure.
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const threadCap = isMobile ? 4 : 8;
+  const numThreads = canMultiThread ? Math.min(hardwareConcurrency, threadCap) : 1;
+  ort.env.wasm.numThreads = numThreads;
+  console.log(`[EdgeLLM Worker] 🔧 ORT numThreads: ${numThreads} (hw: ${hardwareConcurrency}, SAB: ${canMultiThread})`);
+
 
   // Always use wasm execution provider — webgpu requires the /webgpu sub-entry
   // which is not exported in our installed version.
   const providers: string[] = ["wasm"];
   console.log("[EdgeLLM Worker] 🧠 Execution providers:", providers);
 
+  // ── Check for a pre-compiled WASM module in CacheStorage ────────────────────
+  // If present, ORT will reuse it and skip the 5–20s JIT compile step.
+  const cachedWasmModule = await getCachedWasmModule(config.idbKey);
+  if (cachedWasmModule) {
+    console.log(`[EdgeLLM Worker] ⚡ Pre-compiled WASM module found — skipping JIT compile.`);
+  } else {
+    console.log(`[EdgeLLM Worker] 🔧 No compiled WASM cache — will compile fresh (and cache for next time).`);
+  }
+
   try {
     console.log(`[EdgeLLM Worker] ⚙️  Creating ONNX session (attempt 1) with providers: [${providers.join(", ")}]...`);
     const sessionStart = performance.now();
-    session = await ort.InferenceSession.create(modelBuffer, {
-      executionProviders: providers,
-      graphOptimizationLevel: "all",
-    });
-    console.log(`[EdgeLLM Worker] ✅ ONNX session created in ${(performance.now() - sessionStart).toFixed(0)}ms (attempt 1)`);
+    session = await ort.InferenceSession.create(
+      cachedWasmModule ?? modelBuffer,
+      {
+        executionProviders: providers,
+        graphOptimizationLevel: "all",
+      }
+    );
+    const sessionMs = (performance.now() - sessionStart).toFixed(0);
+    console.log(`[EdgeLLM Worker] ✅ ONNX session created in ${sessionMs}ms (attempt 1)`);
+
+    // If we compiled fresh (no cache hit), persist the compiled module now.
+    // WebAssembly.serialize is currently behind a flag in some browsers — the
+    // helper is non-fatal so failures are safe to ignore.
+    if (!cachedWasmModule) {
+      cacheWasmModule(session as any, config.idbKey).catch(() => {});
+    }
   } catch (err) {
     console.error("[EdgeLLM Worker] ❌ Session attempt 1 FAILED:", err);
     console.warn("[EdgeLLM Worker] 🔄 Retrying with single-thread WASM fallback (numThreads=1, simd=false)...");
@@ -650,13 +721,34 @@ async function generate(prompt: string | ChatMLMessage[], reqId: number) {
 
   let promptText = "";
   if (Array.isArray(prompt)) {
-    // Manually build ChatML format — identical to Python's apply_chat_template.
-    // This avoids any JS/Python template differences and works regardless of
-    // which tokenizer repo is loaded.
-    for (const msg of prompt) {
-      promptText += `<|im_start|>${msg.role}\n${msg.content}<|im_end|>\n`;
+    // Prefer the tokenizer's own apply_chat_template() — this reads the
+    // chat_template Jinja string baked into tokenizer_config.json so the
+    // prompt format always matches what the model was fine-tuned with.
+    // SmolLM2's official tokenizer ships with this method and template.
+    // Fall back to manual ChatML for models (e.g. Hornet) that don't.
+    if (typeof tokenizer.apply_chat_template === "function") {
+      try {
+        // tokenize: false → return the formatted string, not token ids
+        promptText = tokenizer.apply_chat_template(prompt, {
+          tokenize: false,
+          add_generation_prompt: true,
+        }) as string;
+        console.log("[EdgeLLM Worker] 🔤 apply_chat_template() used — length:", promptText.length);
+      } catch (tmplErr) {
+        console.warn("[EdgeLLM Worker] ⚠️  apply_chat_template() failed, falling back to manual ChatML:", tmplErr);
+        promptText = "";
+      }
     }
-    promptText += "<|im_start|>assistant\n";
+
+    if (!promptText) {
+      // Manual ChatML fallback — mirrors Python's apply_chat_template for
+      // models that use the <|im_start|>/<|im_end|> convention.
+      for (const msg of prompt) {
+        promptText += `<|im_start|>${msg.role}\n${msg.content}<|im_end|>\n`;
+      }
+      promptText += "<|im_start|>assistant\n";
+      console.log("[EdgeLLM Worker] 🔤 Manual ChatML fallback used — length:", promptText.length);
+    }
   } else {
     promptText = prompt;
   }
